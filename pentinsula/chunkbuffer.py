@@ -97,9 +97,9 @@ class ChunkBuffer:
         self._chunk_index = chunk_index
 
     @contextmanager
-    def _load_or_pass_dataset(self, file, dataset):
+    def _load_or_pass_dataset(self, file, dataset, filemode):
         if dataset is None:
-            with _open_or_pass_file(file, self._filename, "r") as h5f:
+            with _open_or_pass_file(file, self._filename, filemode) as h5f:
                 yield h5f[self._dataset]
         else:
             # Only check if self._filename is a Path in order to allow for storing streams.
@@ -108,8 +108,8 @@ class ChunkBuffer:
             yield dataset
 
     @contextmanager
-    def _retrieve_dataset(self, file, dataset):
-        with self._load_or_pass_dataset(file, dataset) as dataset:
+    def _retrieve_dataset(self, file, dataset, filemode):
+        with self._load_or_pass_dataset(file, dataset, filemode) as dataset:
             def raise_error(name, in_file, in_memory):
                 raise RuntimeError(f"The {name} of dataset {dataset.name} in file {dataset.filename} ({in_file}) "
                                    f"does not match the {name} of ChunkBuffer ({in_memory}).")
@@ -124,7 +124,22 @@ class ChunkBuffer:
             yield dataset
 
     def read(self, chunk_index=None, file=None, dataset=None):
-        with self._retrieve_dataset(file, dataset) as dataset:
+        with self._retrieve_dataset(file, dataset, "r") as dataset:
             if chunk_index is not None:
                 self.select(chunk_index)
             dataset.read_direct(self._buffer, _chunk_slices(self._chunk_index, self._buffer.shape))
+
+    def write(self, must_exist, file=None, dataset=None):
+        with self._retrieve_dataset(file, dataset, "a") as dataset:
+            chunk_slices = _chunk_slices(self._chunk_index, self._buffer.shape)
+            if must_exist:
+                for dim, (chunk_slice, dataset_length) in enumerate(zip(chunk_slices, dataset.shape)):
+                    if chunk_slice.stop > dataset_length:
+                        raise RuntimeError(f"The currently selected chunk ({self._chunk_index}) "
+                                           f"does not exist in dataset {dataset.name} "
+                                           f"found conflict in dimension {dim}. Use must_exist=False to resize.")
+
+            else:
+                dataset.resize(tuple(chunk_slice.stop for chunk_slice in chunk_slices))
+
+            dataset[chunk_slices] = self._buffer

@@ -100,7 +100,7 @@ class ChunkBuffer:
     def _load_or_pass_dataset(self, file, dataset, filemode):
         if dataset is None:
             with _open_or_pass_file(file, self._filename, filemode) as h5f:
-                yield h5f[self._dataset]
+                yield h5f[self._dataset_name]
         else:
             # Only check if self._filename is a Path in order to allow for storing streams.
             if isinstance(self._filename, Path) and dataset.filename != str(self._filename):
@@ -132,14 +132,15 @@ class ChunkBuffer:
     def write(self, must_exist, file=None, dataset=None):
         with self._retrieve_dataset(file, dataset, "a") as dataset:
             chunk_slices = _chunk_slices(self._chunk_index, self._buffer.shape)
-            if must_exist:
-                for dim, (chunk_slice, dataset_length) in enumerate(zip(chunk_slices, dataset.shape)):
-                    if chunk_slice.stop > dataset_length:
-                        raise RuntimeError(f"The currently selected chunk ({self._chunk_index}) "
-                                           f"does not exist in dataset {dataset.name} "
-                                           f"found conflict in dimension {dim}. Use must_exist=False to resize.")
+            is_big_enough = all(chunk_slice.stop <= dataset_length
+                                for chunk_slice, dataset_length in zip(chunk_slices, dataset.shape))
 
-            else:
-                dataset.resize(tuple(chunk_slice.stop for chunk_slice in chunk_slices))
+            if not is_big_enough:
+                if must_exist:
+                    raise RuntimeError(f"The currently selected chunk ({self._chunk_index}) "
+                                       f"does not exist in dataset {dataset.name}. "
+                                       "Use must_exist=False to resize.")
+                else:
+                    dataset.resize(tuple(chunk_slice.stop for chunk_slice in chunk_slices))
 
             dataset[chunk_slices] = self._buffer

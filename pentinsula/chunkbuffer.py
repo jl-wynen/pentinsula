@@ -150,4 +150,12 @@ class ChunkBuffer:
                                                                  dataset.shape))
             dataset.write_direct(self._buffer, dest_sel=chunk_slices)
 
-            dataset[chunk_slices] = self._buffer
+    def create_dataset(self, file=None, filemode="a", write=True):
+        with _open_or_pass_file(file, self._filename, filemode) as h5f:
+            dataset = h5f.create_dataset(self._dataset_name,
+                                         _required_dataset_shape(_chunk_slices(self._chunk_index, self._buffer.shape)),
+                                         chunks=self._buffer.shape,
+                                         maxshape=self._maxshape,
+                                         dtype=self._buffer.dtype)
+            if write:
+                self.write(True, dataset=dataset)

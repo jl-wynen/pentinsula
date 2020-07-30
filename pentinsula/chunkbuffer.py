@@ -103,7 +103,7 @@ class ChunkBuffer:
                 yield h5f[self._dataset_name]
         else:
             # Only check if self._filename is a Path in order to allow for storing streams.
-            if isinstance(self._filename, Path) and dataset.filename != str(self._filename):
+            if isinstance(self._filename, Path) and dataset.file.filename != str(self._filename):
                 raise ValueError(f"Dataset is not in the stored file ({self._filename}).")
             yield dataset
 

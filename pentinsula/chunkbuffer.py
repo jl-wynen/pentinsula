@@ -61,12 +61,12 @@ class ChunkBuffer:
         else:
             self._buffer = np.empty(shape, dtype=dtype)
 
-        self._maxshape = tuple(maxshape) if isinstance(maxshape, (tuple, list)) else (None,) * len(shape)
+        self._maxshape = tuple(maxshape) if isinstance(maxshape, (tuple, list)) else (None,) * self._buffer.ndim
         if len(self._maxshape) != len(self._buffer.shape):
             raise ValueError(f"Argument maxshape {maxshape} has wrong number of dimensions. "
                              f"Expected {len(self._buffer.shape)} according to buffer shape.")
 
-        self._chunk_index = (0,) * len(shape)
+        self._chunk_index = (0,) * self._buffer.ndim
 
     @classmethod
     def load(cls, file, dataset, chunk_index):

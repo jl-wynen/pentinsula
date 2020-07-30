@@ -22,14 +22,14 @@ def _open_or_pass_file(file, stored_filename, *args, **kwargs):
     return nullcontext(file) if isinstance(file, h5.File) else h5.File(file, *args, **kwargs)
 
 
-def _normalise_chunk_index(chunk_index, partitioning_shape):
-    if len(chunk_index) != len(partitioning_shape):
-        raise IndexError(f"Invalid index dimension {len(chunk_index)} for dataset dimension {len(partitioning_shape)}")
+def _normalise_chunk_index(chunk_index, nchunks):
+    if len(chunk_index) != len(nchunks):
+        raise IndexError(f"Invalid index dimension {len(chunk_index)} for dataset dimension {len(nchunks)}")
 
     normalised = []
-    for index, length in zip(chunk_index, partitioning_shape):
+    for index, length in zip(chunk_index, nchunks):
         if length <= index <= -length:
-            raise IndexError(f"chunk_index {chunk_index} is out of range with chunk shape {partitioning_shape}")
+            raise IndexError(f"chunk_index {chunk_index} is out of range with number of chunks {nchunks}")
         normalised.append(index if index >= 0 else length - index)
     return tuple(normalised)
 

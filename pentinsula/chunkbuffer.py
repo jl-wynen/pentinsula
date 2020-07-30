@@ -43,6 +43,10 @@ def _chunk_slices(chunk_index, chunk_shape):
                  for i, n in zip(chunk_index, chunk_shape))
 
 
+def _required_dataset_shape(chunk_slices):
+    return tuple(chunk_slice.stop for chunk_slice in chunk_slices)
+
+
 class ChunkBuffer:
     def __init__(self, file, dataset, shape=None, dtype=None, data=None, maxshape=None):
         # special casing on str instead of converting any file to Path allows for streams
@@ -141,6 +145,9 @@ class ChunkBuffer:
                                        f"does not exist in dataset {dataset.name}. "
                                        "Use must_exist=False to resize.")
                 else:
-                    dataset.resize(tuple(chunk_slice.stop for chunk_slice in chunk_slices))
+                    dataset.resize(max(required, existing)
+                                   for required, existing in zip(_required_dataset_shape(chunk_slices),
+                                                                 dataset.shape))
+            dataset.write_direct(self._buffer, dest_sel=chunk_slices)
 
             dataset[chunk_slices] = self._buffer

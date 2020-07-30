@@ -61,7 +61,7 @@ class ChunkBuffer:
         else:
             self._buffer = np.empty(shape, dtype=dtype)
 
-        self._maxshape = maxshape if isinstance(maxshape, (tuple, list)) else (None,) * len(shape)
+        self._maxshape = tuple(maxshape) if isinstance(maxshape, (tuple, list)) else (None,) * len(shape)
         if len(self._maxshape) != len(self._buffer.shape):
             raise ValueError(f"Argument maxshape {maxshape} has wrong number of dimensions. "
                              f"Expected {len(self._buffer.shape)} according to buffer shape.")
@@ -81,6 +81,39 @@ class ChunkBuffer:
 
             return chunk_buffer
 
+    @property
+    def data(self):
+        # return view to prevent metadata changes in _buffer
+        return self._buffer.view()
+
+    @property
+    def shape(self):
+        return self._buffer.shape
+
+    @property
+    def ndim(self):
+        return self._buffer.ndim
+
+    @property
+    def dtype(self):
+        return self._buffer.dtype
+
+    @property
+    def maxshape(self):
+        return self._maxshape
+
+    @property
+    def chunk_index(self):
+        return self._chunk_index
+
+    @property
+    def filename(self):
+        return self._filename
+
+    @property
+    def dataset_name(self):
+        return self._dataset_name
+
     def select(self, chunk_index):
         """
         Does not read!
@@ -89,8 +122,8 @@ class ChunkBuffer:
         """
 
         # validate index
-        if len(chunk_index) != self._buffer.ndim:
-            raise IndexError(f"Invalid index dimension {len(chunk_index)} for dataset dimension {self._buffer.ndim}.")
+        if len(chunk_index) != self.ndim:
+            raise IndexError(f"Invalid index dimension {len(chunk_index)} for dataset dimension {self.ndim}.")
         for dim, (index, length, maxlength) in enumerate(zip(chunk_index, self._buffer.shape, self._maxshape)):
             if index < 0:
                 raise IndexError(f"Negative chunk_index in dimension {dim}. Only positive values allowed.")
@@ -156,6 +189,6 @@ class ChunkBuffer:
                                          _required_dataset_shape(_chunk_slices(self._chunk_index, self._buffer.shape)),
                                          chunks=self._buffer.shape,
                                          maxshape=self._maxshape,
-                                         dtype=self._buffer.dtype)
+                                         dtype=self.dtype)
             if write:
                 self.write(True, dataset=dataset)

@@ -72,6 +72,8 @@ class ChunkBuffer:
     def load(cls, file, dataset, chunk_index):
         with _open_or_pass_file(file, None, "r") as h5f:
             dataset = dataset if isinstance(dataset, h5.Dataset) else h5f[dataset]
+            if dataset.chunks is None:
+                raise RuntimeError(f"Dataset {dataset.name} is not chunked.")
 
             chunk_buffer = cls(file, dataset, dataset.chunks, dtype=dataset.dtype, maxshape=dataset.maxshape)
             chunk_buffer.select(_normalise_chunk_index(chunk_index,

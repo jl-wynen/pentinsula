@@ -48,7 +48,7 @@ class ChunkBuffer:
         # special casing on str instead of converting any file to Path allows for streams
         self._filename = (Path(file.filename) if isinstance(file, h5.File)
                           else (Path(file) if isinstance(file, str) else file))
-        self._dataset = dataset.name if isinstance(dataset, h5.Dataset) else dataset
+        self._dataset_name = dataset.name if isinstance(dataset, h5.Dataset) else dataset
 
         if data is not None:
             self._buffer = np.array(data, dtype=dtype)

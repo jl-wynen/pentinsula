@@ -32,7 +32,7 @@ class TestChunkBuffer(unittest.TestCase):
             filename = _random_string(random.randint(1, 10))
             dataset_name = _random_string(random.randint(1, 10))
             shape = _random_int_tuple(1, 10, 4)
-            maxshape = maxshape if maxshape is None else maxshape*len(shape)
+            maxshape = maxshape if maxshape is None else maxshape * len(shape)
             buffer = ChunkBuffer(filename, dataset_name,
                                  shape=shape, dtype=dtype,
                                  maxshape=maxshape)
@@ -42,7 +42,7 @@ class TestChunkBuffer(unittest.TestCase):
             self.assertEqual(buffer.data.shape, shape)
             self.assertEqual(buffer.dtype, dtype if dtype else np.float64)
             self.assertEqual(buffer.data.dtype, dtype if dtype else np.float64)
-            self.assertEqual(buffer.maxshape, (None,)*len(shape))
+            self.assertEqual(buffer.maxshape, (None,) * len(shape))
 
         # valid arguments, from array
         for dtype in (int, float, np.float32, np.int32, None):
@@ -56,7 +56,7 @@ class TestChunkBuffer(unittest.TestCase):
 
         # valid arguments, from array with reshaping
         in_shape = (10, 4)
-        for target_shape in ((20, 2), (40, ), (5, 8)):
+        for target_shape in ((20, 2), (40,), (5, 8)):
             array = np.random.uniform(-10, 10, in_shape)
             buffer = ChunkBuffer(_random_string(random.randint(1, 10)), _random_string(random.randint(1, 10)),
                                  data=array, shape=target_shape)
@@ -77,7 +77,7 @@ class TestChunkBuffer(unittest.TestCase):
         for ndim in range(1, 4):
             chunk_shape = _random_int_tuple(1, 10, ndim)
             nchunks = _random_int_tuple(1, 4, ndim)
-            total_shape = tuple(n*c for n, c in zip(chunk_shape, nchunks))
+            total_shape = tuple(n * c for n, c in zip(chunk_shape, nchunks))
             array = np.random.uniform(-10, 10, total_shape)
 
             stream = BytesIO()
@@ -102,6 +102,27 @@ class TestChunkBuffer(unittest.TestCase):
             h5f.create_dataset("data", data=np.random.uniform(-10, 10, (5, 3)))
         with self.assertRaises(RuntimeError):
             ChunkBuffer.load(stream, "data", (0, 0))
+
+    def test_dataset_creation(self):
+        for ndim in range(1, 4):
+            max_nchunks = _random_int_tuple(1, 4, ndim)
+            for chunk_index in product(*tuple(map(range, max_nchunks))):
+                chunk_shape = _random_int_tuple(1, 10, ndim)
+                total_shape = tuple(n * (i + 1) for n, i in zip(chunk_shape, chunk_index))
+                chunk_data = np.random.uniform(-10, 10, chunk_shape).astype(random.choice((float, int)))
+
+                stream = BytesIO()
+                buffer = ChunkBuffer(stream, "data", data=chunk_data, maxshape=(None,) * ndim)
+                buffer.select(chunk_index)
+                buffer.create_dataset(stream if random.random() < 0.5 else None, filemode="w", write=True)
+
+                with h5.File(stream, "r") as h5f:
+                    dataset = h5f["data"]
+                    self.assertEqual(dataset.shape, total_shape)
+                    self.assertEqual(dataset.chunks, chunk_shape)
+                    self.assertEqual(dataset.dtype, chunk_data.dtype)
+                    self.assertEqual(dataset.maxshape, buffer.maxshape)
+                    np.testing.assert_allclose(ChunkBuffer.load(h5f, "data", chunk_index).data, chunk_data)
 
 
 if __name__ == '__main__':

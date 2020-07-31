@@ -1,5 +1,6 @@
 from io import BytesIO
 from itertools import product
+from functools import wraps
 from pathlib import Path
 import random
 import string
@@ -12,12 +13,12 @@ import numpy as np
 from pentinsula import ChunkBuffer
 from pentinsula.chunkbuffer import _chunk_slices
 
-
 N_REPEAT_TEST_CASE = 30
 
 
 def repeat(n):
     def wrapper(func):
+        @wraps(func)
         def repeater(*args):
             for i in range(n):
                 func(*args)
@@ -287,7 +288,7 @@ class TestChunkBuffer(unittest.TestCase):
 
     def test_real_files(self):
         with TemporaryDirectory() as tempdir:
-            filename = Path(tempdir)/"test_file.h5"
+            filename = Path(tempdir) / "test_file.h5"
             chunk_shape = (1, 2, 3)
             array = np.random.uniform(-10, 10, chunk_shape)
             buffer = ChunkBuffer(filename, "data", data=array)
@@ -328,7 +329,7 @@ class TestChunkBuffer(unittest.TestCase):
 
             # wrong dataset
             with h5.File(filename, "a") as h5f:
-                wrong_dataset = h5f.create_dataset("wrong_data", (1, ))
+                wrong_dataset = h5f.create_dataset("wrong_data", (1,))
                 with self.assertRaises(ValueError):
                     buffer.write(must_exist=False, dataset=wrong_dataset)
 

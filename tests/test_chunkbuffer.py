@@ -25,6 +25,10 @@ def _random_string(n):
     return "".join(random.choice(letters) for _ in range(n))
 
 
+def _chunk_indices(nchunks):
+    yield from product(*tuple(map(range, nchunks)))
+
+
 class TestChunkBuffer(unittest.TestCase):
     def test_construction(self):
         # valid arguments, individual shape, dtype
@@ -84,7 +88,7 @@ class TestChunkBuffer(unittest.TestCase):
             with h5.File(stream, "w") as h5f:
                 h5f.create_dataset("data", data=array, chunks=chunk_shape)
             # valid, load all chunks
-            for chunk_index in product(*tuple(map(range, nchunks))):
+            for chunk_index in _chunk_indices(nchunks):
                 buffer = ChunkBuffer.load(stream, "data", chunk_index)
                 np.testing.assert_allclose(buffer.data, array[_chunk_slices(chunk_index, chunk_shape)],
                                            err_msg=_capture_variables(ndim=ndim,
@@ -106,7 +110,7 @@ class TestChunkBuffer(unittest.TestCase):
     def test_dataset_creation(self):
         for ndim in range(1, 4):
             max_nchunks = _random_int_tuple(1, 4, ndim)
-            for chunk_index in product(*tuple(map(range, max_nchunks))):
+            for chunk_index in _chunk_indices(max_nchunks):
                 chunk_shape = _random_int_tuple(1, 10, ndim)
                 total_shape = tuple(n * (i + 1) for n, i in zip(chunk_shape, chunk_index))
                 chunk_data = np.random.uniform(-10, 10, chunk_shape).astype(random.choice((float, int)))
@@ -133,7 +137,7 @@ class TestChunkBuffer(unittest.TestCase):
             buffer = ChunkBuffer("file", "data", shape=chunk_shape, maxshape=maxshape)
 
             # valid calls
-            for chunk_index in product(*tuple(map(range, nchunks))):
+            for chunk_index in _chunk_indices(nchunks):
                 buffer.select(chunk_index)
                 self.assertEqual(buffer.chunk_index, chunk_index)
 
@@ -158,6 +162,50 @@ class TestChunkBuffer(unittest.TestCase):
                     too_large = chunk_index[:dim] + (nchunks[dim]+random.randint(1, 10),) + chunk_index[dim+1:]
                     with self.assertRaises(IndexError):
                         buffer.select(too_large)
+
+    def test_read(self):
+        for ndim in range(1, 4):
+            chunk_shape = _random_int_tuple(1, 10, ndim)
+            nchunks = _random_int_tuple(1, 4, ndim)
+            total_shape = tuple(n * c for n, c in zip(chunk_shape, nchunks))
+            array = np.random.uniform(-10, 10, total_shape).astype(random.choice((int, float)))
+
+            stream = BytesIO()
+            with h5.File(stream, "w") as h5f:
+                h5f.create_dataset("data", data=array, chunks=chunk_shape, maxshape=(None,)*ndim)
+
+            # valid
+            buffer = ChunkBuffer(stream, "data", shape=chunk_shape, dtype=array.dtype)
+            for chunk_index in _chunk_indices(nchunks):
+                # separate select / read
+                buffer.select(chunk_index)
+                buffer.read()
+                np.testing.assert_allclose(buffer.data, array[_chunk_slices(chunk_index, chunk_shape)])
+
+                # read with index arg
+                buffer.data[...] = np.random.uniform(-20, 20, chunk_shape).astype(buffer.dtype)
+                buffer.read(chunk_index)
+                np.testing.assert_allclose(buffer.data, array[_chunk_slices(chunk_index, chunk_shape)])
+
+            # dataset does not exist
+            buffer = ChunkBuffer(stream, "wrong_name", shape=chunk_shape, dtype=array.dtype)
+            with self.assertRaises(KeyError):
+                buffer.read()
+
+            # invalid chunk shape
+            buffer = ChunkBuffer(stream, "data", shape=tuple(random.randint(1, 10) + n for n in chunk_shape))
+            with self.assertRaises(RuntimeError):
+                buffer.read()
+
+            # invalid datatype
+            buffer = ChunkBuffer(stream, "data", shape=chunk_shape, dtype=np.float32)
+            with self.assertRaises(RuntimeError):
+                buffer.read()
+
+            # invalid maxshape
+            buffer = ChunkBuffer(stream, "data", shape=chunk_shape, dtype=array.dtype, maxshape=chunk_shape)
+            with self.assertRaises(RuntimeError):
+                buffer.read()
 
 
 if __name__ == '__main__':

@@ -3,6 +3,7 @@ from itertools import product
 from pathlib import Path
 import random
 import string
+from tempfile import TemporaryDirectory
 import unittest
 
 import h5py as h5
@@ -10,6 +11,7 @@ import numpy as np
 
 from pentinsula import ChunkBuffer
 from pentinsula.chunkbuffer import _chunk_slices
+
 
 N_REPEAT_TEST_CASE = 30
 
@@ -282,6 +284,53 @@ class TestChunkBuffer(unittest.TestCase):
                     dataset = f["data"]
                     for chunk_slice, expected in chunks:
                         np.testing.assert_allclose(dataset[chunk_slice], expected)
+
+    def test_real_files(self):
+        with TemporaryDirectory() as tempdir:
+            filename = Path(tempdir)/"test_file.h5"
+            chunk_shape = (1, 2, 3)
+            array = np.random.uniform(-10, 10, chunk_shape)
+            buffer = ChunkBuffer(filename, "data", data=array)
+            buffer.create_dataset(filemode="w")
+
+            self.assertTrue(filename.exists())
+            with h5.File(filename, "r") as h5f:
+                np.testing.assert_allclose(h5f["data"][()], array)
+
+            # extend dataset with stored filename
+            array = np.random.uniform(-10, 10, chunk_shape)
+            buffer.select((1, 0, 0))
+            buffer.data[...] = array
+            buffer.write(must_exist=False)
+            with h5.File(filename, "r") as h5f:
+                np.testing.assert_allclose(h5f["data"][1:, :, :], array)
+
+            # extend dataset with passed in filename
+            array = np.random.uniform(-10, 10, chunk_shape)
+            buffer.select((1, 1, 0))
+            buffer.data[...] = array
+            buffer.write(must_exist=False, file=filename)
+            with h5.File(filename, "r") as h5f:
+                np.testing.assert_allclose(h5f["data"][1:, 2:, :], array)
+
+            # extend dataset with passed in dataset
+            array = np.random.uniform(-10, 10, chunk_shape)
+            buffer.select((1, 0, 1))
+            buffer.data[...] = array
+            with h5.File(filename, "r+") as h5f:
+                dataset = h5f["data"]
+                buffer.write(must_exist=False, dataset=dataset)
+                np.testing.assert_allclose(dataset[1:, :2, 3:], array)
+
+            # wrong filename
+            with self.assertRaises(ValueError):
+                buffer.write(must_exist=False, file="wrong_file.h5")
+
+            # wrong dataset
+            with h5.File(filename, "a") as h5f:
+                wrong_dataset = h5f.create_dataset("wrong_data", (1, ))
+                with self.assertRaises(ValueError):
+                    buffer.write(must_exist=False, dataset=wrong_dataset)
 
 
 if __name__ == '__main__':

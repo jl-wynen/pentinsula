@@ -149,7 +149,7 @@ class ChunkBuffer:
     def _retrieve_dataset(self, file, dataset, filemode):
         with self._load_or_pass_dataset(file, dataset, filemode) as dataset:
             def raise_error(name, in_file, in_memory):
-                raise RuntimeError(f"The {name} of dataset {dataset.name} in file {dataset.filename} ({in_file}) "
+                raise RuntimeError(f"The {name} of dataset {dataset.name} in file {dataset.file.filename} ({in_file}) "
                                    f"does not match the {name} of ChunkBuffer ({in_memory}).")
 
             if dataset.chunks != self._buffer.shape:

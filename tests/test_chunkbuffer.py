@@ -55,7 +55,7 @@ class TestChunkBuffer(unittest.TestCase):
                                  shape=shape, dtype=dtype,
                                  maxshape=maxshape)
             self.assertEqual(buffer.filename, Path(filename))
-            self.assertEqual(buffer.dataset_name, dataset_name)
+            self.assertEqual(buffer.dataset_name.relative_to("/"), Path(dataset_name))
             self.assertEqual(buffer.shape, shape)
             self.assertEqual(buffer.data.shape, shape)
             self.assertEqual(buffer.dtype, dtype if dtype else np.float64)

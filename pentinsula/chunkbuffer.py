@@ -21,6 +21,13 @@ def _open_or_pass_file(file, stored_filename, *args, **kwargs):
     return nullcontext(file) if isinstance(file, h5.File) else h5.File(file, *args, **kwargs)
 
 
+def _get_dataset_name(dataset):
+    name = Path(dataset.name if isinstance(dataset, h5.Dataset) else dataset)
+    if not name.is_absolute():
+        name = "/"/name
+    return name
+
+
 def _normalise_chunk_index(chunk_index, nchunks):
     if len(chunk_index) != len(nchunks):
         raise IndexError(f"Invalid index dimension {len(chunk_index)} for dataset dimension {len(nchunks)}")
@@ -51,7 +58,7 @@ class ChunkBuffer:
         # special casing on str instead of converting any file to Path allows for streams
         self._filename = (Path(file.filename) if isinstance(file, h5.File)
                           else (Path(file) if isinstance(file, str) else file))
-        self._dataset_name = dataset.name if isinstance(dataset, h5.Dataset) else dataset
+        self._dataset_name = _get_dataset_name(dataset)
 
         if data is not None:
             self._buffer = np.array(data, dtype=dtype)
@@ -138,8 +145,11 @@ class ChunkBuffer:
     def _load_or_pass_dataset(self, file, dataset, filemode):
         if dataset is None:
             with _open_or_pass_file(file, self._filename, filemode) as h5f:
-                yield h5f[self._dataset_name]
+                yield h5f[str(self._dataset_name)]
         else:
+            dataset_name = _get_dataset_name(dataset)
+            if dataset_name != self.dataset_name:
+                raise ValueError(f"Wrong dataset. Stored: {self.dataset_name}, you passed in {dataset_name}.")
             # Only check if self._filename is a Path in order to allow for storing streams.
             if isinstance(self._filename, Path) and dataset.file.filename != str(self._filename):
                 raise ValueError(f"Dataset is not in the stored file ({self._filename}).")
@@ -186,7 +196,7 @@ class ChunkBuffer:
 
     def create_dataset(self, file=None, filemode="a", write=True):
         with _open_or_pass_file(file, self._filename, filemode) as h5f:
-            dataset = h5f.create_dataset(self._dataset_name,
+            dataset = h5f.create_dataset(str(self._dataset_name),
                                          _required_dataset_shape(_chunk_slices(self._chunk_index, self._buffer.shape)),
                                          chunks=self._buffer.shape,
                                          maxshape=self._maxshape,

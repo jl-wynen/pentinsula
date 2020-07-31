@@ -12,6 +12,17 @@ from pentinsula import ChunkBuffer
 from pentinsula.chunkbuffer import _chunk_slices
 
 
+N_REPEAT_TEST_CASE = 30
+
+def repeat(n):
+    def wrapper(func):
+        def repeater(*args):
+            for i in range(n):
+                func(*args)
+        return repeater
+    return wrapper
+
+
 def _capture_variables(**kwargs):
     return "  " + "\n  ".join(f"{name} := {value}" for name, value in kwargs.items())
 
@@ -30,6 +41,7 @@ def _chunk_indices(nchunks):
 
 
 class TestChunkBuffer(unittest.TestCase):
+    @repeat(N_REPEAT_TEST_CASE)
     def test_construction(self):
         # valid arguments, individual shape, dtype
         for dtype, maxshape in product((int, float, np.float32, np.int32, None), (None, (None,))):
@@ -77,6 +89,7 @@ class TestChunkBuffer(unittest.TestCase):
         with self.assertRaises(ValueError):
             ChunkBuffer("test.h5", "test", shape=(1, 2), maxshape=(1, 2, 3))
 
+    @repeat(N_REPEAT_TEST_CASE)
     def test_load(self):
         for ndim in range(1, 4):
             chunk_shape = _random_int_tuple(1, 10, ndim)
@@ -107,6 +120,7 @@ class TestChunkBuffer(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             ChunkBuffer.load(stream, "data", (0, 0))
 
+    @repeat(N_REPEAT_TEST_CASE)
     def test_dataset_creation(self):
         for ndim in range(1, 4):
             max_nchunks = _random_int_tuple(1, 4, ndim)
@@ -128,6 +142,7 @@ class TestChunkBuffer(unittest.TestCase):
                     self.assertEqual(dataset.maxshape, buffer.maxshape)
                     np.testing.assert_allclose(ChunkBuffer.load(h5f, "data", chunk_index).data, chunk_data)
 
+    @repeat(N_REPEAT_TEST_CASE)
     def test_select(self):
         for ndim in range(1, 5):
             chunk_shape = _random_int_tuple(1, 10, ndim)
@@ -163,6 +178,7 @@ class TestChunkBuffer(unittest.TestCase):
                     with self.assertRaises(IndexError):
                         buffer.select(too_large)
 
+    @repeat(N_REPEAT_TEST_CASE)
     def test_read(self):
         for ndim in range(1, 4):
             chunk_shape = _random_int_tuple(1, 10, ndim)

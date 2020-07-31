@@ -1,15 +1,14 @@
 from contextlib import contextmanager, nullcontext
+from io import BytesIO
 from pathlib import Path
 
 import h5py as h5
 import numpy as np
 
 
-# TODO support for BytesIO?
-
 def _open_or_pass_file(file, stored_filename, *args, **kwargs):
     if stored_filename is not None:
-        if file is not None:
+        if file is not None and not isinstance(file, BytesIO):
             filename = Path(file.filename) if isinstance(file, h5.File) else Path(file)
             if filename != stored_filename:
                 raise ValueError(f"Argument file ({filename}) does not match stored file ({stored_filename}.")

@@ -11,15 +11,17 @@ import numpy as np
 from pentinsula import ChunkBuffer
 from pentinsula.chunkbuffer import _chunk_slices
 
-
 N_REPEAT_TEST_CASE = 30
+
 
 def repeat(n):
     def wrapper(func):
         def repeater(*args):
             for i in range(n):
                 func(*args)
+
         return repeater
+
     return wrapper
 
 
@@ -147,7 +149,7 @@ class TestChunkBuffer(unittest.TestCase):
         for ndim in range(1, 5):
             chunk_shape = _random_int_tuple(1, 10, ndim)
             nchunks = _random_int_tuple(1, 4, ndim)
-            maxshape = tuple(f*n if random.random() < 0.25 else None
+            maxshape = tuple(f * n if random.random() < 0.25 else None
                              for f, n in zip(nchunks, chunk_shape))
             buffer = ChunkBuffer("file", "data", shape=chunk_shape, maxshape=maxshape)
 
@@ -157,7 +159,7 @@ class TestChunkBuffer(unittest.TestCase):
                 self.assertEqual(buffer.chunk_index, chunk_index)
 
             def random_chunk_index():
-                return tuple(map(lambda n: random.randint(0, n-1), nchunks))
+                return tuple(map(lambda n: random.randint(0, n - 1), nchunks))
 
             # invalid number of dimensions
             too_many_dims = random_chunk_index() + (0,)
@@ -170,11 +172,11 @@ class TestChunkBuffer(unittest.TestCase):
             # index out of bounds
             for dim in range(ndim):
                 chunk_index = random_chunk_index()
-                negative = chunk_index[:dim] + (random.randint(-10, -1),) + chunk_index[dim+1:]
+                negative = chunk_index[:dim] + (random.randint(-10, -1),) + chunk_index[dim + 1:]
                 with self.assertRaises(IndexError):
                     buffer.select(negative)
                 if maxshape[dim] is not None:
-                    too_large = chunk_index[:dim] + (nchunks[dim]+random.randint(1, 10),) + chunk_index[dim+1:]
+                    too_large = chunk_index[:dim] + (nchunks[dim] + random.randint(1, 10),) + chunk_index[dim + 1:]
                     with self.assertRaises(IndexError):
                         buffer.select(too_large)
 
@@ -188,7 +190,7 @@ class TestChunkBuffer(unittest.TestCase):
 
             stream = BytesIO()
             with h5.File(stream, "w") as h5f:
-                h5f.create_dataset("data", data=array, chunks=chunk_shape, maxshape=(None,)*ndim)
+                h5f.create_dataset("data", data=array, chunks=chunk_shape, maxshape=(None,) * ndim)
 
             # valid
             buffer = ChunkBuffer(stream, "data", shape=chunk_shape, dtype=array.dtype)
@@ -222,6 +224,64 @@ class TestChunkBuffer(unittest.TestCase):
             buffer = ChunkBuffer(stream, "data", shape=chunk_shape, dtype=array.dtype, maxshape=chunk_shape)
             with self.assertRaises(RuntimeError):
                 buffer.read()
+
+    @repeat(N_REPEAT_TEST_CASE)
+    def test_write_overwrite(self):
+        for ndim in range(1, 4):
+            chunk_shape = _random_int_tuple(1, 10, ndim)
+            nchunks = _random_int_tuple(1, 4, ndim)
+            total_shape = tuple(n * c for n, c in zip(chunk_shape, nchunks))
+
+            stream = BytesIO()
+            chunk = np.random.uniform(-10, 10, chunk_shape).astype(random.choice((int, float)))
+            file_content = np.random.uniform(-10, 10, total_shape).astype(chunk.dtype)
+            with h5.File(stream, "w") as h5f:
+                h5f.create_dataset("data", data=file_content, chunks=chunk_shape, maxshape=(None,) * ndim)
+
+            buffer = ChunkBuffer(stream, "data", data=chunk)
+            # valid indices
+            for chunk_index in _chunk_indices(nchunks):
+                with h5.File(stream, "a") as h5f:
+                    h5f["data"][...] = file_content
+
+                buffer.select(chunk_index)
+                buffer.write(must_exist=True)
+                desired_file_content = file_content.copy()
+                desired_file_content[_chunk_slices(chunk_index, chunk_shape)] = chunk
+                with h5.File(stream, "r") as h5f:
+                    np.testing.assert_allclose(h5f["data"][()], desired_file_content)
+
+            # index out of bounds
+            for dim in range(ndim):
+                chunk_index = tuple(map(lambda n: random.randint(0, n - 1), nchunks))
+                chunk_index = chunk_index[:dim] + (nchunks[dim] + random.randint(1, 10),) + chunk_index[dim + 1:]
+                buffer.select(chunk_index)
+                with self.assertRaises(RuntimeError):
+                    buffer.write(must_exist=True)
+
+    @repeat(N_REPEAT_TEST_CASE)
+    def test_write_extend(self):
+        for ndim in range(1, 4):
+            chunk_shape = _random_int_tuple(1, 10, ndim)
+            nchunks = _random_int_tuple(1, 5, ndim)
+            chunks = []
+
+            stream = BytesIO()
+            with h5.File(stream, "w") as h5f:
+                h5f.create_dataset("data", shape=chunk_shape, dtype=float,
+                                   chunks=chunk_shape, maxshape=(None,) * ndim)
+
+            buffer = ChunkBuffer(stream, "data", shape=chunk_shape, dtype=float)
+            for chunk_index in _chunk_indices(nchunks):
+                chunks.append((_chunk_slices(chunk_index, chunk_shape), np.random.uniform(-10, 10, chunk_shape)))
+                buffer.select(chunk_index)
+                buffer.data[...] = chunks[-1][1]
+                buffer.write(must_exist=False)
+
+                with h5.File(stream, "r") as f:
+                    dataset = f["data"]
+                    for chunk_slice, expected in chunks:
+                        np.testing.assert_allclose(dataset[chunk_slice], expected)
 
 
 if __name__ == '__main__':

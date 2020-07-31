@@ -124,6 +124,41 @@ class TestChunkBuffer(unittest.TestCase):
                     self.assertEqual(dataset.maxshape, buffer.maxshape)
                     np.testing.assert_allclose(ChunkBuffer.load(h5f, "data", chunk_index).data, chunk_data)
 
+    def test_select(self):
+        for ndim in range(1, 5):
+            chunk_shape = _random_int_tuple(1, 10, ndim)
+            nchunks = _random_int_tuple(1, 4, ndim)
+            maxshape = tuple(f*n if random.random() < 0.25 else None
+                             for f, n in zip(nchunks, chunk_shape))
+            buffer = ChunkBuffer("file", "data", shape=chunk_shape, maxshape=maxshape)
+
+            # valid calls
+            for chunk_index in product(*tuple(map(range, nchunks))):
+                buffer.select(chunk_index)
+                self.assertEqual(buffer.chunk_index, chunk_index)
+
+            def random_chunk_index():
+                return tuple(map(lambda n: random.randint(0, n-1), nchunks))
+
+            # invalid number of dimensions
+            too_many_dims = random_chunk_index() + (0,)
+            with self.assertRaises(IndexError):
+                buffer.select(too_many_dims)
+            too_few_dims = random_chunk_index()[:-1]
+            with self.assertRaises(IndexError):
+                buffer.select(too_few_dims)
+
+            # index out of bounds
+            for dim in range(ndim):
+                chunk_index = random_chunk_index()
+                negative = chunk_index[:dim] + (random.randint(-10, -1),) + chunk_index[dim+1:]
+                with self.assertRaises(IndexError):
+                    buffer.select(negative)
+                if maxshape[dim] is not None:
+                    too_large = chunk_index[:dim] + (nchunks[dim]+random.randint(1, 10),) + chunk_index[dim+1:]
+                    with self.assertRaises(IndexError):
+                        buffer.select(too_large)
+
 
 if __name__ == '__main__':
     unittest.main()

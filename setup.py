@@ -10,8 +10,7 @@ def git_version_tag():
     """
 
     try:
-        refs = subprocess.run(["git", "show-ref", "--abbrev", "--tags"],
-                              capture_output=True, check=True).stdout \
+        refs = subprocess.check_output(["git", "show-ref", "--abbrev", "--tags"]) \
             .decode("utf-8") \
             .strip() \
             .splitlines()
@@ -38,8 +37,7 @@ def get_version():
     """
 
     tag_hash, version = git_version_tag()
-    current_hash = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
-                                  capture_output=True, check=True).stdout \
+    current_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]) \
         .decode("utf-8") \
         .strip()
     if tag_hash != current_hash:

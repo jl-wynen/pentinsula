@@ -15,7 +15,7 @@ def _normalise_chunk_index(chunk_index, nchunks):
     for index, length in zip(chunk_index, nchunks):
         if not (-length <= index < length):
             raise IndexError(f"chunk_index {chunk_index} is out of range with number of chunks {nchunks}")
-        normalised.append(index if index >= 0 else length - index)
+        normalised.append(index if index >= 0 else length + index)
     return tuple(normalised)
 
 

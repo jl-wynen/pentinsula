@@ -62,6 +62,22 @@ class TimeSeries:
         ...
 
     @property
+    def shape(self):
+        return self._buffer.shape[1:]
+
+    @property
+    def ndim(self):
+        return self._buffer.ndim - 1
+
+    @property
+    def dtype(self):
+        return self._buffer.dtype
+
+    @property
+    def maxtime(self):
+        return self._buffer.maxshape[0]
+
+    @property
     def time_index(self):
         return self._buffer.chunk_index[0] * self._buffer.shape[0] \
                + self._buffer_time_index

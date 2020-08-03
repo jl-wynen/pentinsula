@@ -66,9 +66,10 @@ class TimeSeries:
         return self._buffer.chunk_index[0] * self._buffer.shape[0] \
                + self._buffer_time_index
 
-    # def get_buffer(self):
-    #     return self.buffer[self.buffer_index]
-    #
+    @property
+    def item(self):
+        return self._buffer.data[self._buffer_time_index]
+
     # # advance / store / commit ??
     # def next(self):
     #     self.buffer_index += 1

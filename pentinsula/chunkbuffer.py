@@ -1,32 +1,10 @@
 from contextlib import contextmanager
-from io import BytesIO
 from pathlib import Path
 
 import h5py as h5
 import numpy as np
 
-
-@contextmanager
-def _open_or_pass_file(file, stored_filename, *args, **kwargs):
-    if stored_filename is not None:
-        if file is not None and not isinstance(file, BytesIO):
-            filename = Path(file.filename) if isinstance(file, h5.File) else Path(file)
-            if filename != stored_filename:
-                raise ValueError(f"Argument file ({filename}) does not match stored file ({stored_filename}.")
-        else:
-            file = stored_filename
-    else:
-        if file is None:
-            raise ValueError("Arguments file and stored_filename cannot both be None.")
-
-    yield file if isinstance(file, h5.File) else h5.File(file, *args, **kwargs)
-
-
-def _get_dataset_name(dataset):
-    name = Path(dataset.name if isinstance(dataset, h5.Dataset) else dataset)
-    if not name.is_absolute():
-        name = "/"/name
-    return name
+from .h5utils import get_dataset_name, open_or_pass_file
 
 
 def _normalise_chunk_index(chunk_index, nchunks):
@@ -59,7 +37,7 @@ class ChunkBuffer:
         # special casing on str instead of converting any file to Path allows for streams
         self._filename = (Path(file.filename) if isinstance(file, h5.File)
                           else (Path(file) if isinstance(file, str) else file))
-        self._dataset_name = _get_dataset_name(dataset)
+        self._dataset_name = get_dataset_name(dataset)
 
         if data is not None:
             self._buffer = np.array(data, dtype=dtype)
@@ -77,7 +55,7 @@ class ChunkBuffer:
 
     @classmethod
     def load(cls, file, dataset, chunk_index):
-        with _open_or_pass_file(file, None, "r") as h5f:
+        with open_or_pass_file(file, None, "r") as h5f:
             dataset = dataset if isinstance(dataset, h5.Dataset) else h5f[dataset]
             if dataset.chunks is None:
                 raise RuntimeError(f"Dataset {dataset.name} is not chunked.")
@@ -145,10 +123,10 @@ class ChunkBuffer:
     @contextmanager
     def _load_or_pass_dataset(self, file, dataset, filemode):
         if dataset is None:
-            with _open_or_pass_file(file, self._filename, filemode) as h5f:
+            with open_or_pass_file(file, self._filename, filemode) as h5f:
                 yield h5f[str(self._dataset_name)]
         else:
-            dataset_name = _get_dataset_name(dataset)
+            dataset_name = get_dataset_name(dataset)
             if dataset_name != self.dataset_name:
                 raise ValueError(f"Wrong dataset. Stored: {self.dataset_name}, you passed in {dataset_name}.")
             # Only check if self._filename is a Path in order to allow for storing streams.
@@ -196,7 +174,7 @@ class ChunkBuffer:
             dataset.write_direct(self._buffer, dest_sel=chunk_slices)
 
     def create_dataset(self, file=None, filemode="a", write=True):
-        with _open_or_pass_file(file, self._filename, filemode) as h5f:
+        with open_or_pass_file(file, self._filename, filemode) as h5f:
             dataset = h5f.create_dataset(str(self._dataset_name),
                                          _required_dataset_shape(_chunk_slices(self._chunk_index, self._buffer.shape)),
                                          chunks=self._buffer.shape,

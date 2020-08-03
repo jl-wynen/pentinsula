@@ -125,18 +125,9 @@ class TimeSeries:
 
         self._buffer_time_index = time_index % self._buffer.shape[0]
 
-    # # advance / store / commit ??
-    # def next(self):
-    #     self.buffer_index += 1
-    #     if self.buffer_index >= self.buffer.shape[0]:
-    #         # check maxshape in first dim
-    #
-    #
-    #         self.buffer.write(...)
-    #         next_chunk_index = self.buffer.chunk_index
-    #         next_chunk_index = (next_chunk_index[0]+1,) + next_chunk_index[1:]
-    #         self.buffer.select(next_chunk_index)
-    #
+    def advance(self, on_buffer_change=BufferPolicy.NOTHING):
+        self.select(self.time_index + 1, on_buffer_change)
+
     # def append(self, entry):
     #     self.get_buffer()[...] = entry
     #     self.next()

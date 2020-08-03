@@ -11,6 +11,8 @@ from .h5utils import open_or_pass_file
 
 # registry for collective writes? -> benchmark, hack next()
 
+# iterators for reading / writing entries
+
 
 class BufferPolicy(Flag):
     NOTHING = auto()
@@ -132,10 +134,6 @@ class TimeSeries:
     #     self.get_buffer()[...] = entry
     #     self.next()
     #
-    # def __iter__(self):
-    #     # iterate over chunks and entries of chunks
-    #     ...
-    #
     # # 'write'?
     # def flush(self):
     #     ...
@@ -143,16 +141,3 @@ class TimeSeries:
     # def read(self):
     #     # read current chunk?
     #     ...
-
-
-def main():
-    ts = TimeSeries()
-    # print(type(ts.get_buffer()))
-    x = ts.get_buffer()[...] = [1, 2]
-    # x[...] = [1, 2]
-
-    print(ts.buffer)
-
-
-if __name__ == "__main__":
-    main()

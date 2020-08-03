@@ -105,7 +105,7 @@ class TestChunkBuffer(unittest.TestCase):
             stream = BytesIO()
             with h5.File(stream, "w") as h5f:
                 h5f.create_dataset("data", data=array, chunks=chunk_shape)
-            # valid, load all chunks
+            # valid, load all chunks, positive indices
             for chunk_index in _chunk_indices(nchunks):
                 buffer = ChunkBuffer.load(stream, "data", chunk_index)
                 np.testing.assert_allclose(buffer.data, array[_chunk_slices(chunk_index, chunk_shape)],
@@ -113,10 +113,29 @@ class TestChunkBuffer(unittest.TestCase):
                                                                       chunk_shape=chunk_shape,
                                                                       nchunks=nchunks,
                                                                       chunk_index=chunk_index))
+            # negative index
+            neg_index = (-1,) * ndim
+            pos_index = tuple(n - 1 for n in nchunks)
+            buffer = ChunkBuffer.load(stream, "data", neg_index)
+            np.testing.assert_allclose(buffer.data, array[_chunk_slices(pos_index, chunk_shape)],
+                                       err_msg=_capture_variables(ndim=ndim,
+                                                                  chunk_shape=chunk_shape,
+                                                                  nchunks=nchunks,
+                                                                  chunk_index=neg_index))
 
             # invalid, load non-existent chunk
+            # outside of maxshape, discoverable through maxshape
             with self.assertRaises(IndexError):
                 ChunkBuffer.load(stream, "data", nchunks)
+            # outside of maxshape, not discoverable through maxshape
+            with self.assertRaises(IndexError):
+                ChunkBuffer.load(stream, "data", (nchunks[0] + 1,) + nchunks[1:])
+            # within maxshape but not stored
+            with h5.File(stream, "w") as h5f:
+                h5f.create_dataset("partially_filled", shape=total_shape, chunks=chunk_shape,
+                                   maxshape=tuple(n * 2 for n in total_shape))
+            with self.assertRaises(IndexError):
+                ChunkBuffer.load(stream, "partially_filled", (nchunks[0] + 1,) + nchunks[1:])
 
         # invalid, contiguous dataset
         stream = BytesIO()

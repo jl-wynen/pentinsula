@@ -1,4 +1,4 @@
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from io import BytesIO
 from pathlib import Path
 
@@ -6,6 +6,7 @@ import h5py as h5
 import numpy as np
 
 
+@contextmanager
 def _open_or_pass_file(file, stored_filename, *args, **kwargs):
     if stored_filename is not None:
         if file is not None and not isinstance(file, BytesIO):
@@ -18,7 +19,7 @@ def _open_or_pass_file(file, stored_filename, *args, **kwargs):
         if file is None:
             raise ValueError("Arguments file and stored_filename cannot both be None.")
 
-    return nullcontext(file) if isinstance(file, h5.File) else h5.File(file, *args, **kwargs)
+    yield file if isinstance(file, h5.File) else h5.File(file, *args, **kwargs)
 
 
 def _get_dataset_name(dataset):

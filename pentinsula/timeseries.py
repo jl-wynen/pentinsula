@@ -86,6 +86,24 @@ class TimeSeries:
     def item(self):
         return self._buffer.data[self._buffer_time_index]
 
+    def select(self, time_index):
+        """
+        DOES NOT READ / WRITE
+        :param time_index:
+        :return:
+        """
+
+        if time_index < 0:
+            raise IndexError("Time index must be positive.")
+        if self.maxtime is not None and time_index >= self.maxtime:
+            raise IndexError(f"Time index out of bounds, index {time_index}"
+                             f"larger than maxtime {self.maxtime}")
+
+        time_chunk = time_index // self._buffer.shape[0]
+        if time_chunk != self._buffer.chunk_index[0]:
+            self._buffer.select((time_chunk,) + self._buffer.chunk_index[1:])
+        self._buffer_time_index = time_index % self._buffer.shape[0]
+
     # # advance / store / commit ??
     # def next(self):
     #     self.buffer_index += 1

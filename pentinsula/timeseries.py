@@ -1,3 +1,5 @@
+from enum import Flag, auto
+
 import h5py as h5
 import numpy as np
 
@@ -8,6 +10,13 @@ from .h5utils import open_or_pass_file
 # name for 'entry for given time'? -> slot / element / timepoint
 
 # registry for collective writes? -> benchmark, hack next()
+
+
+class BufferPolicy(Flag):
+    NOTHING = auto()
+    READ = auto()
+    WRITE = auto()
+    READ_WRITE = READ | WRITE
 
 
 def _normalise_time_index(index, ntimes):
@@ -86,10 +95,14 @@ class TimeSeries:
     def item(self):
         return self._buffer.data[self._buffer_time_index]
 
-    def select(self, time_index):
+    def select(self, time_index, on_buffer_change=BufferPolicy.NOTHING):
         """
-        DOES NOT READ / WRITE
+        this does not read:
+        ts.select(3)
+        ts.select(3, BufferPolicy.READ)
+
         :param time_index:
+        :param on_buffer_change:
         :return:
         """
 
@@ -101,7 +114,15 @@ class TimeSeries:
 
         time_chunk = time_index // self._buffer.shape[0]
         if time_chunk != self._buffer.chunk_index[0]:
+            # need to change buffered chunk
+            if on_buffer_change & BufferPolicy.WRITE:
+                # save current
+                self._buffer.write(must_exist=False)
             self._buffer.select((time_chunk,) + self._buffer.chunk_index[1:])
+            if on_buffer_change & BufferPolicy.READ:
+                # read new
+                self._buffer.read()
+
         self._buffer_time_index = time_index % self._buffer.shape[0]
 
     # # advance / store / commit ??

@@ -20,6 +20,7 @@ def _normalise_chunk_index(chunk_index, nchunks):
 
 
 def _tuple_ceildiv(numerator, denominator):
+    # -(-n // d) computes ceil(n / d) but to infinite precision.
     return tuple(-(-num // den) for num, den in zip(numerator, denominator))
 
 
@@ -28,6 +29,10 @@ def _chunk_number(full_shape, chunk_shape):
 
 
 def _chunk_fill_level(full_shape, chunk_shape, chunk_index, nchunks):
+    # The Modulo operation evaluates to
+    # for i in range(2*n):   n - (-i % n)
+    #   -> n, 1, 2, ..., n-2, n-1, n, 1, 2, ..., n-2, n-1
+    # This is needed because remainder = 0 means, the chunk is fully filled, i.e. fill_level = n.
     return tuple(chunk - (-full % chunk) if idx == nchunk - 1 else chunk
                  for full, chunk, idx, nchunk in zip(full_shape, chunk_shape, chunk_index, nchunks))
 

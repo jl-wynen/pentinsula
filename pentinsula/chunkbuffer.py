@@ -154,6 +154,10 @@ class ChunkBuffer:
         with self._retrieve_dataset(file, dataset, "r") as dataset:
             if chunk_index is not None:
                 self.select(chunk_index)
+            nchunks = _tuple_floordiv(dataset.shape, self._buffer.shape)
+            for dim, (i, n) in enumerate(zip(self.chunk_index, nchunks)):
+                if i >= n:
+                    raise IndexError(f"Chunk index {i} out of bounds in dimension {dim} with number of chunks = {n}")
             dataset.read_direct(self._buffer, _chunk_slices(self._chunk_index, self._buffer.shape))
 
     def write(self, must_exist, file=None, dataset=None):

@@ -23,6 +23,20 @@ def _tuple_floordiv(numerator, denominator):
     return tuple(num // den for num, den in zip(numerator, denominator))
 
 
+def _tuple_ceildiv(numerator, denominator):
+    return tuple(-(-num // den) for num, den in zip(numerator, denominator))
+
+
+def _chunk_number(full_shape, chunk_shape):
+    return _tuple_ceildiv(full_shape, chunk_shape)
+
+
+def _chunk_fill_level(full_shape, chunk_shape, chunk_index, nchunks):
+    fill_level = tuple(chunk - (-full % chunk) if idx == nchunk - 1 else chunk
+                       for full, chunk, idx, nchunk in zip(full_shape, chunk_shape, chunk_index, nchunks))
+    return fill_level
+
+
 def _chunk_slices(chunk_index, chunk_shape):
     return tuple(slice(i * n, (i + 1) * n)
                  for i, n in zip(chunk_index, chunk_shape))
@@ -154,11 +168,16 @@ class ChunkBuffer:
         with self._retrieve_dataset(file, dataset, "r") as dataset:
             if chunk_index is not None:
                 self.select(chunk_index)
-            nchunks = _tuple_floordiv(dataset.shape, self._buffer.shape)
+            nchunks = _chunk_number(dataset.shape, self._buffer.shape)
             for dim, (i, n) in enumerate(zip(self.chunk_index, nchunks)):
                 if i >= n:
                     raise IndexError(f"Chunk index {i} out of bounds in dimension {dim} with number of chunks = {n}")
-            dataset.read_direct(self._buffer, _chunk_slices(self._chunk_index, self._buffer.shape))
+
+            fill_level = _chunk_fill_level(dataset.shape, self._buffer.shape, self._chunk_index, nchunks)
+            dataset.read_direct(self._buffer,
+                                source_sel=_chunk_slices(self._chunk_index, self._buffer.shape),
+                                dest_sel=tuple(slice(0, n) for n in fill_level))
+            return fill_level
 
     def write(self, must_exist, file=None, dataset=None):
         with self._retrieve_dataset(file, dataset, "a") as dataset:

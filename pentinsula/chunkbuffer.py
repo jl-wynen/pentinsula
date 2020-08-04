@@ -28,9 +28,8 @@ def _chunk_number(full_shape, chunk_shape):
 
 
 def _chunk_fill_level(full_shape, chunk_shape, chunk_index, nchunks):
-    fill_level = tuple(chunk - (-full % chunk) if idx == nchunk - 1 else chunk
-                       for full, chunk, idx, nchunk in zip(full_shape, chunk_shape, chunk_index, nchunks))
-    return fill_level
+    return tuple(chunk - (-full % chunk) if idx == nchunk - 1 else chunk
+                 for full, chunk, idx, nchunk in zip(full_shape, chunk_shape, chunk_index, nchunks))
 
 
 def _chunk_slices(chunk_index, chunk_shape):

@@ -19,10 +19,6 @@ def _normalise_chunk_index(chunk_index, nchunks):
     return tuple(normalised)
 
 
-def _tuple_floordiv(numerator, denominator):
-    return tuple(num // den for num, den in zip(numerator, denominator))
-
-
 def _tuple_ceildiv(numerator, denominator):
     return tuple(-(-num // den) for num, den in zip(numerator, denominator))
 

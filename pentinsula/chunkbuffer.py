@@ -68,7 +68,7 @@ class ChunkBuffer:
         self._chunk_index = (0,) * self._buffer.ndim
 
     @classmethod
-    def load(cls, file, dataset, chunk_index):
+    def load(cls, file, dataset, chunk_index, o_fill_level=None):
         with open_or_pass_file(file, None, "r") as h5f:
             dataset = dataset if isinstance(dataset, h5.Dataset) else h5f[dataset]
             if dataset.chunks is None:
@@ -76,10 +76,12 @@ class ChunkBuffer:
 
             chunk_buffer = cls(file, dataset, dataset.chunks, dtype=dataset.dtype, maxshape=dataset.maxshape)
             chunk_buffer.select(_normalise_chunk_index(chunk_index,
-                                                       _tuple_floordiv(dataset.shape, chunk_buffer._buffer.shape)))
+                                                       _chunk_number(dataset.shape, chunk_buffer._buffer.shape)))
+            fill_level = chunk_buffer.read(dataset=dataset)
 
-            chunk_buffer.read(dataset=dataset)
-
+            if o_fill_level is not None:
+                o_fill_level.clear()
+                o_fill_level.extend(fill_level)
             return chunk_buffer
 
     @property

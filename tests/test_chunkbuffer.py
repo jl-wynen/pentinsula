@@ -227,6 +227,10 @@ class TestChunkBuffer(unittest.TestCase):
                 buffer.read(chunk_index)
                 np.testing.assert_allclose(buffer.data, array[_chunk_slices(chunk_index, chunk_shape)])
 
+            # index out of bounds
+            with self.assertRaises(IndexError):
+                buffer.read(nchunks)
+
             # dataset does not exist
             buffer = ChunkBuffer(stream, "wrong_name", shape=chunk_shape, dtype=array.dtype)
             with self.assertRaises(KeyError):

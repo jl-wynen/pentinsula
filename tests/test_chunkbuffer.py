@@ -13,7 +13,7 @@ import numpy as np
 from pentinsula import ChunkBuffer
 from pentinsula.chunkbuffer import _chunk_slices
 
-N_REPEAT_TEST_CASE = 30
+N_REPEAT_TEST_CASE = 5
 
 
 def repeat(n):
@@ -147,7 +147,7 @@ class TestChunkBuffer(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             ChunkBuffer.load(stream, "data", (0, 0))
 
-    @repeat(N_REPEAT_TEST_CASE // 10)
+    @repeat(N_REPEAT_TEST_CASE)
     def test_dataset_creation(self):
         for ndim in range(1, 4):
             max_nchunks = _random_int_tuple(1, 4, ndim)
@@ -219,29 +219,47 @@ class TestChunkBuffer(unittest.TestCase):
         for ndim in range(1, 4):
             chunk_shape = _random_int_tuple(1, 10, ndim)
             nchunks = _random_int_tuple(1, 4, ndim)
-            total_shape = tuple(n * c for n, c in zip(chunk_shape, nchunks))
-            array = np.random.uniform(-10, 10, total_shape).astype(random.choice((int, float)))
+            for fill_level in chain((None,), _product_range((1,) * ndim, chunk_shape)):
+                if fill_level is None:
+                    total_shape = tuple(n * c for n, c in zip(chunk_shape, nchunks))
+                else:
+                    total_shape = tuple(n * (c - 1) + fl
+                                        for n, c, fl in zip(chunk_shape, nchunks, fill_level))
+                array = np.random.uniform(-10, 10, total_shape).astype(random.choice((int, float)))
+                stream = BytesIO()
+                with h5.File(stream, "w") as h5f:
+                    h5f.create_dataset("data", data=array, chunks=chunk_shape, maxshape=(None,) * ndim)
 
-            stream = BytesIO()
-            with h5.File(stream, "w") as h5f:
-                h5f.create_dataset("data", data=array, chunks=chunk_shape, maxshape=(None,) * ndim)
+                def validate_fill_level(chunk_index, actual_fill_level):
+                    target_fill_level = chunk_shape if fill_level is None else fill_level
+                    for idx, n, length, actual, target in zip(chunk_index, nchunks, chunk_shape,
+                                                              actual_fill_level, target_fill_level):
+                        if idx == n - 1:
+                            self.assertEqual(actual, target)
+                        else:
+                            self.assertEqual(actual, length)
 
-            # valid
-            buffer = ChunkBuffer(stream, "data", shape=chunk_shape, dtype=array.dtype)
-            for chunk_index in _chunk_indices(nchunks):
-                # separate select / read
-                buffer.select(chunk_index)
-                buffer.read()
-                np.testing.assert_allclose(buffer.data, array[_chunk_slices(chunk_index, chunk_shape)])
+                # valid
+                buffer = ChunkBuffer(stream, "data", shape=chunk_shape, dtype=array.dtype)
+                for chunk_index in _product_range(nchunks):
+                    # separate select / read
+                    buffer.select(chunk_index)
+                    read_fill_level = buffer.read()
+                    validate_fill_level(chunk_index, read_fill_level)
+                    fill_slices = tuple(map(slice, fill_level)) if fill_level is not None else ...
+                    np.testing.assert_allclose(buffer.data[fill_slices],
+                                               array[_chunk_slices(chunk_index, chunk_shape)][fill_slices])
 
-                # read with index arg
-                buffer.data[...] = np.random.uniform(-20, 20, chunk_shape).astype(buffer.dtype)
-                buffer.read(chunk_index)
-                np.testing.assert_allclose(buffer.data, array[_chunk_slices(chunk_index, chunk_shape)])
+                    # read with index arg
+                    buffer.data[...] = np.random.uniform(-20, 20, chunk_shape).astype(buffer.dtype)
+                    read_fill_level = buffer.read(chunk_index)
+                    validate_fill_level(chunk_index, read_fill_level)
+                    np.testing.assert_allclose(buffer.data[fill_slices],
+                                               array[_chunk_slices(chunk_index, chunk_shape)][fill_slices])
 
-            # index out of bounds
-            with self.assertRaises(IndexError):
-                buffer.read(nchunks)
+                # index out of bounds
+                with self.assertRaises(IndexError):
+                    buffer.read(nchunks)
 
             # dataset does not exist
             buffer = ChunkBuffer(stream, "wrong_name", shape=chunk_shape, dtype=array.dtype)

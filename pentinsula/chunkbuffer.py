@@ -42,8 +42,9 @@ def _chunk_slices(chunk_index, chunk_shape):
                  for i, n in zip(chunk_index, chunk_shape))
 
 
-def _required_dataset_shape(chunk_slices):
-    return tuple(chunk_slice.stop for chunk_slice in chunk_slices)
+def _required_dataset_shape(chunk_index, chunk_shape, fill_level):
+    return tuple(idx * length + fl
+                 for idx, length, fl in zip(chunk_index, chunk_shape, fill_level))
 
 
 class ChunkBuffer:
@@ -198,10 +199,14 @@ class ChunkBuffer:
                                                                  dataset.shape))
             dataset.write_direct(self._buffer, dest_sel=chunk_slices)
 
-    def create_dataset(self, file=None, filemode="a", write=True):
+    def create_dataset(self, file=None, filemode="a", write=True, fill_level=None):
+        fill_level = self._buffer.shape if fill_level is None else fill_level
+
         with open_or_pass_file(file, self._filename, filemode) as h5f:
             dataset = h5f.create_dataset(str(self._dataset_name),
-                                         _required_dataset_shape(_chunk_slices(self._chunk_index, self._buffer.shape)),
+                                         _required_dataset_shape(self._chunk_index,
+                                                                 self._buffer.shape,
+                                                                 fill_level),
                                          chunks=self._buffer.shape,
                                          maxshape=self._maxshape,
                                          dtype=self.dtype)

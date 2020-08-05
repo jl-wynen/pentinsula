@@ -1,5 +1,5 @@
 from io import BytesIO
-from itertools import product
+from itertools import chain, product, starmap
 from functools import wraps
 from pathlib import Path
 import random
@@ -41,8 +41,11 @@ def _random_string(n):
     return "".join(random.choice(letters) for _ in range(n))
 
 
-def _chunk_indices(nchunks):
-    yield from product(*tuple(map(range, nchunks)))
+def _product_range(starts, ends=None):
+    if ends is None:
+        ends = starts
+        starts = (0,) * len(ends)
+    yield from product(*tuple(starmap(range, zip(starts, ends))))
 
 
 class TestChunkBuffer(unittest.TestCase):
@@ -106,7 +109,7 @@ class TestChunkBuffer(unittest.TestCase):
             with h5.File(stream, "w") as h5f:
                 h5f.create_dataset("data", data=array, chunks=chunk_shape)
             # valid, load all chunks, positive indices
-            for chunk_index in _chunk_indices(nchunks):
+            for chunk_index in _product_range(nchunks):
                 buffer = ChunkBuffer.load(stream, "data", chunk_index)
                 np.testing.assert_allclose(buffer.data, array[_chunk_slices(chunk_index, chunk_shape)],
                                            err_msg=_capture_variables(ndim=ndim,
@@ -144,27 +147,36 @@ class TestChunkBuffer(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             ChunkBuffer.load(stream, "data", (0, 0))
 
-    @repeat(N_REPEAT_TEST_CASE)
+    @repeat(N_REPEAT_TEST_CASE // 10)
     def test_dataset_creation(self):
         for ndim in range(1, 4):
             max_nchunks = _random_int_tuple(1, 4, ndim)
-            for chunk_index in _chunk_indices(max_nchunks):
+            for chunk_index in _product_range(max_nchunks):
                 chunk_shape = _random_int_tuple(1, 10, ndim)
-                total_shape = tuple(n * (i + 1) for n, i in zip(chunk_shape, chunk_index))
-                chunk_data = np.random.uniform(-10, 10, chunk_shape).astype(random.choice((float, int)))
+                for fill_level in chain((None,), _product_range((1,) * ndim, chunk_shape)):
+                    if fill_level is None:
+                        total_shape = tuple(n * (i + 1)
+                                            for n, i in zip(chunk_shape, chunk_index))
+                    else:
+                        total_shape = tuple(n * i + fl
+                                            for n, i, fl in zip(chunk_shape, chunk_index, fill_level))
+                    chunk_data = np.random.uniform(-10, 10, chunk_shape).astype(random.choice((float, int)))
 
-                stream = BytesIO()
-                buffer = ChunkBuffer(stream, "data", data=chunk_data, maxshape=(None,) * ndim)
-                buffer.select(chunk_index)
-                buffer.create_dataset(stream if random.random() < 0.5 else None, filemode="w", write=True)
+                    stream = BytesIO()
+                    buffer = ChunkBuffer(stream, "data", data=chunk_data, maxshape=(None,) * ndim)
+                    buffer.select(chunk_index)
+                    buffer.create_dataset(stream if random.random() < 0.5 else None, filemode="w",
+                                          write=True, fill_level=fill_level)
 
-                with h5.File(stream, "r") as h5f:
-                    dataset = h5f["data"]
-                    self.assertEqual(dataset.shape, total_shape)
-                    self.assertEqual(dataset.chunks, chunk_shape)
-                    self.assertEqual(dataset.dtype, chunk_data.dtype)
-                    self.assertEqual(dataset.maxshape, buffer.maxshape)
-                    np.testing.assert_allclose(ChunkBuffer.load(h5f, "data", chunk_index).data, chunk_data)
+                    with h5.File(stream, "r") as h5f:
+                        dataset = h5f["data"]
+                        self.assertEqual(dataset.shape, total_shape)
+                        self.assertEqual(dataset.chunks, chunk_shape)
+                        self.assertEqual(dataset.dtype, chunk_data.dtype)
+                        self.assertEqual(dataset.maxshape, buffer.maxshape)
+                        fill_slices = tuple(map(slice, fill_level)) if fill_level is not None else ...
+                        np.testing.assert_allclose(ChunkBuffer.load(h5f, "data", chunk_index).data[fill_slices],
+                                                   chunk_data[fill_slices])
 
     @repeat(N_REPEAT_TEST_CASE)
     def test_select(self):
@@ -176,7 +188,7 @@ class TestChunkBuffer(unittest.TestCase):
             buffer = ChunkBuffer("file", "data", shape=chunk_shape, maxshape=maxshape)
 
             # valid calls
-            for chunk_index in _chunk_indices(nchunks):
+            for chunk_index in _product_range(nchunks):
                 buffer.select(chunk_index)
                 self.assertEqual(buffer.chunk_index, chunk_index)
 
@@ -266,7 +278,7 @@ class TestChunkBuffer(unittest.TestCase):
 
             buffer = ChunkBuffer(stream, "data", data=chunk)
             # valid indices
-            for chunk_index in _chunk_indices(nchunks):
+            for chunk_index in _product_range(nchunks):
                 with h5.File(stream, "a") as h5f:
                     h5f["data"][...] = file_content
 
@@ -298,7 +310,7 @@ class TestChunkBuffer(unittest.TestCase):
                                    chunks=chunk_shape, maxshape=(None,) * ndim)
 
             buffer = ChunkBuffer(stream, "data", shape=chunk_shape, dtype=float)
-            for chunk_index in _chunk_indices(nchunks):
+            for chunk_index in _product_range(nchunks):
                 chunks.append((_chunk_slices(chunk_index, chunk_shape), np.random.uniform(-10, 10, chunk_shape)))
                 buffer.select(chunk_index)
                 buffer.data[...] = chunks[-1][1]

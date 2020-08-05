@@ -182,22 +182,27 @@ class ChunkBuffer:
                                 dest_sel=tuple(slice(0, n) for n in fill_level))
             return fill_level
 
-    def write(self, must_exist, file=None, dataset=None):
-        with self._retrieve_dataset(file, dataset, "a") as dataset:
-            chunk_slices = _chunk_slices(self._chunk_index, self._buffer.shape)
-            is_big_enough = all(chunk_slice.stop <= dataset_length
-                                for chunk_slice, dataset_length in zip(chunk_slices, dataset.shape))
+    def write(self, must_exist, fill_level=None, file=None, dataset=None):
+        fill_level = self._buffer.shape if fill_level is None else fill_level
+        required_shape = _required_dataset_shape(self._chunk_index,
+                                                 self._buffer.shape,
+                                                 fill_level)
 
-            if not is_big_enough:
+        with self._retrieve_dataset(file, dataset, "a") as dataset:
+            if any(required > current
+                   for required, current in zip(required_shape, dataset.shape)):
                 if must_exist:
-                    raise RuntimeError(f"The currently selected chunk ({self._chunk_index}) "
+                    raise RuntimeError(f"The currently selected chunk {self._chunk_index} "
                                        f"does not exist in dataset {dataset.name}. "
                                        "Use must_exist=False to resize.")
                 else:
                     dataset.resize(max(required, existing)
-                                   for required, existing in zip(_required_dataset_shape(chunk_slices),
+                                   for required, existing in zip(required_shape,
                                                                  dataset.shape))
-            dataset.write_direct(self._buffer, dest_sel=chunk_slices)
+
+            dataset.write_direct(self._buffer,
+                                 source_sel=tuple(slice(0, n) for n in fill_level),
+                                 dest_sel=_chunk_slices(self._chunk_index, self._buffer.shape))
 
     def create_dataset(self, file=None, filemode="a", write=True, fill_level=None):
         fill_level = self._buffer.shape if fill_level is None else fill_level
@@ -211,4 +216,4 @@ class ChunkBuffer:
                                          maxshape=self._maxshape,
                                          dtype=self.dtype)
             if write:
-                self.write(True, dataset=dataset)
+                self.write(True, dataset=dataset, fill_level=fill_level)

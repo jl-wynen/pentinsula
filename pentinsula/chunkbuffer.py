@@ -7,46 +7,6 @@ import numpy as np
 from .h5utils import get_dataset_name, open_or_pass_file
 
 
-def _normalise_chunk_index(chunk_index, nchunks):
-    if len(chunk_index) != len(nchunks):
-        raise IndexError(f"Invalid index dimension {len(chunk_index)} for dataset dimension {len(nchunks)}")
-
-    normalised = []
-    for index, length in zip(chunk_index, nchunks):
-        if not (-length <= index < length):
-            raise IndexError(f"chunk_index {chunk_index} is out of range with number of chunks {nchunks}")
-        normalised.append(index if index >= 0 else length + index)
-    return tuple(normalised)
-
-
-def _tuple_ceildiv(numerator, denominator):
-    # -(-n // d) computes ceil(n / d) but to infinite precision.
-    return tuple(-(-num // den) for num, den in zip(numerator, denominator))
-
-
-def _chunk_number(full_shape, chunk_shape):
-    return _tuple_ceildiv(full_shape, chunk_shape)
-
-
-def _chunk_fill_level(full_shape, chunk_shape, chunk_index, nchunks):
-    # The Modulo operation evaluates to
-    # for i in range(2*n):   n - (-i % n)
-    #   -> n, 1, 2, ..., n-2, n-1, n, 1, 2, ..., n-2, n-1
-    # This is needed because remainder = 0 means, the chunk is fully filled, i.e. fill_level = n.
-    return tuple(chunk - (-full % chunk) if idx == nchunk - 1 else chunk
-                 for full, chunk, idx, nchunk in zip(full_shape, chunk_shape, chunk_index, nchunks))
-
-
-def _chunk_slices(chunk_index, chunk_shape):
-    return tuple(slice(i * n, (i + 1) * n)
-                 for i, n in zip(chunk_index, chunk_shape))
-
-
-def _required_dataset_shape(chunk_index, chunk_shape, fill_level):
-    return tuple(idx * length + fl
-                 for idx, length, fl in zip(chunk_index, chunk_shape, fill_level))
-
-
 class ChunkBuffer:
     def __init__(self, file, dataset, shape=None, dtype=None, data=None, maxshape=None):
         # special casing on str instead of converting any file to Path allows for streams
@@ -217,3 +177,43 @@ class ChunkBuffer:
                                          dtype=self.dtype)
             if write:
                 self.write(True, dataset=dataset, fill_level=fill_level)
+
+
+def _normalise_chunk_index(chunk_index, nchunks):
+    if len(chunk_index) != len(nchunks):
+        raise IndexError(f"Invalid index dimension {len(chunk_index)} for dataset dimension {len(nchunks)}")
+
+    normalised = []
+    for index, length in zip(chunk_index, nchunks):
+        if not (-length <= index < length):
+            raise IndexError(f"chunk_index {chunk_index} is out of range with number of chunks {nchunks}")
+        normalised.append(index if index >= 0 else length + index)
+    return tuple(normalised)
+
+
+def _tuple_ceildiv(numerator, denominator):
+    # -(-n // d) computes ceil(n / d) but to infinite precision.
+    return tuple(-(-num // den) for num, den in zip(numerator, denominator))
+
+
+def _chunk_number(full_shape, chunk_shape):
+    return _tuple_ceildiv(full_shape, chunk_shape)
+
+
+def _chunk_fill_level(full_shape, chunk_shape, chunk_index, nchunks):
+    # The Modulo operation evaluates to
+    # for i in range(2*n):   n - (-i % n)
+    #   -> n, 1, 2, ..., n-2, n-1, n, 1, 2, ..., n-2, n-1
+    # This is needed because remainder = 0 means, the chunk is fully filled, i.e. fill_level = n.
+    return tuple(chunk - (-full % chunk) if idx == nchunk - 1 else chunk
+                 for full, chunk, idx, nchunk in zip(full_shape, chunk_shape, chunk_index, nchunks))
+
+
+def _chunk_slices(chunk_index, chunk_shape):
+    return tuple(slice(i * n, (i + 1) * n)
+                 for i, n in zip(chunk_index, chunk_shape))
+
+
+def _required_dataset_shape(chunk_index, chunk_shape, fill_level):
+    return tuple(idx * length + fl
+                 for idx, length, fl in zip(chunk_index, chunk_shape, fill_level))

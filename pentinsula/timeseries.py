@@ -4,7 +4,7 @@ import h5py as h5
 import numpy as np
 
 from .chunkbuffer import ChunkBuffer
-from .h5utils import open_or_pass_file
+from .h5utils import open_or_pass_file, open_or_pass_dataset
 
 
 # name for 'entry for given time'? -> slot / element / timepoint
@@ -52,16 +52,12 @@ class TimeSeries:
     # load stored stuff
     @classmethod
     def load(cls, file, dataset, time_index):
-        with open_or_pass_file(file, None, "r") as h5f:
-            dataset = dataset if isinstance(dataset, h5.Dataset) else h5f[dataset]
-            if dataset.chunks is None:
-                raise RuntimeError(f"Dataset {dataset.name} is not chunked.")
-
+        with open_or_pass_dataset(file, dataset, None, "r") as dataset:
             ntimes = dataset.shape[0]
             time_index = _normalise_time_index(time_index, ntimes)
             chunk_length = dataset.chunks[0]
             chunk_index = (time_index // chunk_length,) + (0,) * (len(dataset.shape) - 1)
-            buffer = ChunkBuffer.load(h5f, dataset, chunk_index)
+            buffer = ChunkBuffer.load(dataset.file, dataset, chunk_index)
 
             series = cls(buffer)
             series._buffer_time_index = time_index % chunk_length

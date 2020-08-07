@@ -4,7 +4,7 @@ from pathlib import Path
 import h5py as h5
 import numpy as np
 
-from .h5utils import get_dataset_name, open_or_pass_file
+from .h5utils import get_dataset_name, open_or_pass_file, open_or_pass_dataset
 
 
 class ChunkBuffer:
@@ -30,11 +30,7 @@ class ChunkBuffer:
 
     @classmethod
     def load(cls, file, dataset, chunk_index, o_fill_level=None):
-        with open_or_pass_file(file, None, "r") as h5f:
-            dataset = dataset if isinstance(dataset, h5.Dataset) else h5f[dataset]
-            if dataset.chunks is None:
-                raise RuntimeError(f"Dataset {dataset.name} is not chunked.")
-
+        with open_or_pass_dataset(file, dataset, None, "r") as dataset:
             chunk_buffer = cls(file, dataset, dataset.chunks, dtype=dataset.dtype, maxshape=dataset.maxshape)
             chunk_buffer.select(_normalise_chunk_index(chunk_index,
                                                        _chunk_number(dataset.shape, chunk_buffer._buffer.shape)))

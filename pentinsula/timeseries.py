@@ -7,13 +7,6 @@ from .chunkbuffer import ChunkBuffer
 from .h5utils import open_or_pass_file, open_or_pass_dataset
 
 
-# name for 'entry for given time'? -> slot / element / timepoint
-
-# registry for collective writes? -> benchmark, hack next()
-
-# iterators for reading / writing entries
-
-
 class BufferPolicy(Flag):
     NOTHING = auto()
     READ = auto()
@@ -141,3 +134,18 @@ class TimeSeries:
     def create_dataset(self, file=None, filemode="a", write=True):
         self._buffer.create_dataset(file, filemode, write,
                                     fill_level=(self._buffer_time_index + 1,) + self.shape)
+
+    def read_iter(self, times=slice(None), file=None, dataset=None):
+        file = self._buffer.filename if file is None else file
+        dataset = self._buffer.dataset_name if dataset is None else dataset
+        with open_or_pass_dataset(file, dataset, None, "r") as dataset:
+            ntimes = dataset.shape[0]
+        if times.stop is not None and times.stop > ntimes:
+            raise ValueError(f"Number of times {times.stop} out of bounds, "
+                             f"the dataset only contains {ntimes} time points.")
+
+        _, stop, step = times.indices(ntimes)
+
+        for time_index in range(self.time_index, stop, step):
+            self.select(time_index, BufferPolicy.READ, file=file, dataset=dataset)
+            yield time_index, self.item

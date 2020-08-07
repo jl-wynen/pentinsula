@@ -24,7 +24,7 @@ def open_or_pass_file(file, stored_filename, *args, **kwargs):
 @contextmanager
 def open_or_pass_dataset(file, dataset, stored_filename=None, *args, **kwargs):
     with open_or_pass_file(file, stored_filename, *args, **kwargs) as h5f:
-        dataset = dataset if isinstance(dataset, h5.Dataset) else h5f[dataset]
+        dataset = dataset if isinstance(dataset, h5.Dataset) else h5f[str(dataset)]
         if dataset.chunks is None:
             raise RuntimeError(f"Dataset {dataset.name} is not chunked.")
         yield dataset

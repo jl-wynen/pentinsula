@@ -55,14 +55,22 @@ class TimeSeries:
         with open_or_pass_dataset(file, dataset, None, "r") as dataset:
             series = cls(file, dataset, dataset.chunks[0], shape=dataset.shape[1:],
                          dtype=dataset.dtype, maxshape=dataset.maxshape)
-            series.select(time_index, BufferPolicy.NOTHING)
-            series.read()
+            series.read(time_index, file=dataset.file, dataset=dataset)
             return series
 
     # extend a series
     @classmethod
     def pick_up(cls, file, dataset):
-        ...
+        with open_or_pass_dataset(file, dataset, None, "r") as dataset:
+            series = cls(file, dataset, dataset.chunks[0], shape=dataset.shape[1:],
+                         dtype=dataset.dtype, maxshape=dataset.maxshape)
+            if dataset.shape[0] % dataset.chunks[0] == 0:
+                # first element of chunk
+                series.select(dataset.shape[0], BufferPolicy.NOTHING)
+            else:
+                series.read(dataset.shape[0] - 1, file=dataset.file, dataset=dataset)
+                series.advance(BufferPolicy.NOTHING)
+            return series
 
     @property
     def shape(self):

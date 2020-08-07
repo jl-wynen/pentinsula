@@ -137,3 +137,7 @@ class TimeSeries:
                            fill_level=(self._buffer_time_index + 1,) + self.shape,
                            file=file,
                            dataset=dataset)
+
+    def create_dataset(self, file=None, filemode="a", write=True):
+        self._buffer.create_dataset(file, filemode, write,
+                                    fill_level=(self._buffer_time_index + 1,) + self.shape)

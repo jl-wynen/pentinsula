@@ -91,7 +91,7 @@ class TimeSeries:
     def item(self):
         return self._buffer.data[self._buffer_time_index]
 
-    def select(self, time_index, on_buffer_change=BufferPolicy.NOTHING):
+    def select(self, time_index, on_buffer_change=BufferPolicy.NOTHING, file=None, dataset=None):
         """
         this does not read:
         ts.select(3)
@@ -113,11 +113,11 @@ class TimeSeries:
             # need to change buffered chunk
             if on_buffer_change & BufferPolicy.WRITE:
                 # save current
-                self._buffer.write(must_exist=False)
+                self._buffer.write(must_exist=False, file=file, dataset=dataset)
             self._buffer.select((time_chunk,) + self._buffer.chunk_index[1:])
             if on_buffer_change & BufferPolicy.READ:
                 # read new
-                self._buffer.read()
+                self._buffer.read(file=file, dataset=dataset)
 
         self._buffer_time_index = time_index % self._buffer.shape[0]
 

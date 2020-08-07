@@ -21,12 +21,6 @@ class BufferPolicy(Flag):
     READ_WRITE = READ | WRITE
 
 
-def _normalise_time_index(index, ntimes):
-    if not (-ntimes <= index < ntimes):
-        raise IndexError(f"Time index {index} is out of bounds with number of times = {ntimes}.")
-    return index if index >= 0 else ntimes - index
-
-
 class TimeSeries:
     def __init__(self, file_or_buffer, dataset=None, buffer_length=None,
                  shape=(), dtype=None, maxshape=None):

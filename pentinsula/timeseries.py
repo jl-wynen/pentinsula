@@ -121,8 +121,8 @@ class TimeSeries:
 
         self._buffer_time_index = time_index % self._buffer.shape[0]
 
-    def advance(self, on_buffer_change=BufferPolicy.NOTHING):
-        self.select(self.time_index + 1, on_buffer_change)
+    def advance(self, on_buffer_change=BufferPolicy.NOTHING, file=None, dataset=None):
+        self.select(self.time_index + 1, on_buffer_change, file=file, dataset=dataset)
 
     def read(self, time_index=None, file=None, dataset=None):
         if time_index is not None:

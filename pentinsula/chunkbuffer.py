@@ -211,5 +211,8 @@ def _chunk_slices(chunk_index, chunk_shape):
 
 
 def _required_dataset_shape(chunk_index, chunk_shape, fill_level):
+    for dim, (length, fl) in enumerate(zip(chunk_shape, fill_level)):
+        if fl > length:
+            raise ValueError(f"Fill level {fill_level} is greater than chunk shape {chunk_shape} in dimension {dim}.")
     return tuple(idx * length + fl
                  for idx, length, fl in zip(chunk_index, chunk_shape, fill_level))

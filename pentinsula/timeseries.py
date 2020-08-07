@@ -1,10 +1,7 @@
 from enum import Flag, auto
 
-import h5py as h5
-import numpy as np
-
 from .chunkbuffer import ChunkBuffer
-from .h5utils import open_or_pass_file, open_or_pass_dataset
+from .h5utils import open_or_pass_dataset
 
 
 class BufferPolicy(Flag):

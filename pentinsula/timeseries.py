@@ -132,6 +132,8 @@ class TimeSeries:
             raise RuntimeError(f"Cannot read data for time index {self.time_index}. The dataset only contains items "
                                f"up to time {self._buffer.chunk_index[0] * self._buffer.shape[0] + fill_level[0] - 1}.")
 
-# # 'write'?
-# def flush(self):
-#     ...
+    def write(self, file=None, dataset=None):
+        self._buffer.write(must_exist=False,
+                           fill_level=(self._buffer_time_index + 1,) + self.shape,
+                           file=file,
+                           dataset=dataset)

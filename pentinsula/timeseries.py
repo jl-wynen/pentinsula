@@ -149,3 +149,26 @@ class TimeSeries:
         for time_index in range(self.time_index, stop, step):
             self.select(time_index, BufferPolicy.READ, file=file, dataset=dataset)
             yield time_index, self.item
+
+    def write_iter(self, flush=True, file=None, dataset=None):
+        # Like builtin range but allows for infinite loops with stop=None.
+        def range_(start, stop):
+            if stop is None:
+                idx = start
+                while True:
+                    yield idx
+                    idx += 1
+            else:
+                yield from range(start, stop)
+
+        try:
+            yield self.time_index, self.item
+            for time_index in range_(self.time_index + 1, self._buffer.maxshape[0]):
+                self.advance(BufferPolicy.WRITE, file=file, dataset=dataset)
+                yield time_index, self.item
+        finally:
+            if flush:
+                # Note on optimisation:
+                # In the last advance, the time index was incremented and the current item was not written.
+                # This line cannot lead to writing the same dataset twice.
+                self.write(file, dataset)

@@ -1,5 +1,7 @@
 from enum import Flag, auto
 
+import numpy as np
+
 from .chunkbuffer import ChunkBuffer
 from .h5utils import open_or_pass_dataset
 
@@ -79,6 +81,9 @@ class TimeSeries:
 
     @property
     def item(self):
+        if len(self.shape) == 0:
+            # Return an array for scalar items to allow assignment.
+            return self._buffer.data.reshape(-1, 1)[self._buffer_time_index]
         return self._buffer.data[self._buffer_time_index]
 
     def select(self, time_index, on_buffer_change=BufferPolicy.NOTHING, file=None, dataset=None):

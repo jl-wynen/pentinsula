@@ -1,7 +1,5 @@
 from enum import Flag, auto
 
-import numpy as np
-
 from .chunkbuffer import ChunkBuffer
 from .h5utils import open_or_pass_dataset
 

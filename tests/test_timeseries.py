@@ -7,7 +7,7 @@ import unittest
 import h5py as h5
 import numpy as np
 
-from pentinsula import ChunkBuffer, TimeSeries
+from pentinsula import ChunkBuffer, TimeSeries, BufferPolicy
 
 try:
     from .utils import random_string, random_int_tuple, product_range, repeat
@@ -137,6 +137,75 @@ class MyTestCase(unittest.TestCase):
                 self.assertEqual(loaded.shape, shape)
                 self.assertEqual(loaded.dtype, dtype)
                 self.assertEqual(loaded.time_index, time_index)
+
+    @repeat(N_REPEAT_TEST_CASE)
+    def test_select(self):
+        for ndim in range(0, 4):
+            shape = random_int_tuple(1, 10, ndim)
+            buffer_length = random.randint(1, 10)
+            nchunks = random.randint(1, 4)
+            base_data = np.random.uniform(-10, 10, (nchunks * buffer_length,) + shape)
+            chunk_data = np.random.uniform(-10, 10, (buffer_length,) + shape)
+            repeated_chunk_data = np.tile(chunk_data, (nchunks,) + (1,) * len(shape))
+
+            stream = BytesIO()
+            with h5.File(stream, "w") as h5f:
+                h5f.create_dataset("data", data=base_data, chunks=(buffer_length,) + shape,
+                                   maxshape=(None,) * base_data.ndim)
+
+            # no changes to file or buffer with policy = NOTHING
+            series = TimeSeries(ChunkBuffer(stream, "data", data=chunk_data))
+            for time_index in range(buffer_length * nchunks):
+                series.select(time_index, BufferPolicy.NOTHING)
+                self.assertEqual(series.time_index, time_index)
+                with h5.File(stream, "r") as h5f:
+                    read = h5f["data"][()]
+                    np.testing.assert_allclose(read, base_data)
+                np.testing.assert_allclose(series.item, chunk_data[time_index % buffer_length])
+
+            # reading fills at least the current item when crossing chunk boundary, file is unchanged
+            series = TimeSeries(ChunkBuffer(stream, "data", data=chunk_data))
+            for time_index in range(buffer_length * nchunks):
+                series.select(time_index, BufferPolicy.READ)
+                with h5.File(stream, "r") as h5f:
+                    read = h5f["data"][()]
+                    np.testing.assert_allclose(read, base_data)
+                if time_index >= buffer_length:
+                    np.testing.assert_allclose(series.item, base_data[time_index])
+                else:
+                    np.testing.assert_allclose(series.item, chunk_data[time_index % buffer_length])
+
+            # writing overwrites the file content if crossing a chunk boundary but does not modify the buffer
+            series = TimeSeries(ChunkBuffer(stream, "data", data=chunk_data))
+            for time_index in range(buffer_length * nchunks):
+                series.select(time_index, BufferPolicy.WRITE)
+                with h5.File(stream, "r") as h5f:
+                    read = h5f["data"][()]
+                separatrix = time_index // buffer_length * buffer_length
+                np.testing.assert_allclose(read[:separatrix], repeated_chunk_data[:separatrix])
+                np.testing.assert_allclose(read[separatrix:], base_data[separatrix:])
+                np.testing.assert_allclose(series.item, chunk_data[time_index % buffer_length])
+
+            # reading and writing overwrites file and reads current content if crossing a chunk boundary
+            with h5.File(stream, "w") as h5f:
+                h5f["data"][...] = base_data
+            series = TimeSeries(ChunkBuffer(stream, "data", data=chunk_data))
+            for time_index in range(buffer_length * nchunks):
+                series.select(time_index, BufferPolicy.READ | BufferPolicy.WRITE)
+                if time_index < buffer_length:
+                    # first chunk -> nothing has been read
+                    np.testing.assert_allclose(series.item, chunk_data[time_index])
+                else:
+                    # later chunks -> chunk was read
+                    np.testing.assert_allclose(series.item, base_data[time_index])
+                # set item to fill file with repeated chunk data
+                series.item[...] = repeated_chunk_data[time_index]
+
+                with h5.File(stream, "r") as h5f:
+                    read = h5f["data"][()]
+                separatrix = time_index // buffer_length * buffer_length
+                np.testing.assert_allclose(read[:separatrix], repeated_chunk_data[:separatrix])
+                np.testing.assert_allclose(read[separatrix:], base_data[separatrix:])
 
 
 if __name__ == '__main__':

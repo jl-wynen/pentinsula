@@ -57,6 +57,18 @@ class TimeSeries:
             return series
 
     @property
+    def filename(self):
+        return self._buffer.filename
+
+    @property
+    def dataset_name(self):
+        return self._buffer.dataset_name
+
+    @property
+    def buffer_length(self):
+        return self._buffer.shape[0]
+
+    @property
     def shape(self):
         return self._buffer.shape[1:]
 

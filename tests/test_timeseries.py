@@ -95,6 +95,30 @@ class MyTestCase(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             TimeSeries.load(stream, "data", 0)
 
+    @repeat(N_REPEAT_TEST_CASE)
+    def test_pick_up(self):
+        for ndim in range(0, 4):
+            shape = random_int_tuple(1, 10, ndim)
+            buffer_length = random.randint(1, 10)
+            nchunks = random.randint(1, 4)
+            array = np.random.uniform(-10, 10, (nchunks * buffer_length,) + shape)
+
+            for nstored in range(1, buffer_length * nchunks):
+                stream = BytesIO()
+                with h5.File(stream, "w") as h5f:
+                    h5f.create_dataset("data", data=array[:nstored], chunks=(buffer_length,) + shape,
+                                       maxshape=(None,) * array.ndim)
+
+                series = TimeSeries.pick_up(stream, "data")
+                self.assertEqual(series.dataset_name.relative_to("/"), Path("data"))
+                self.assertEqual(series.buffer_length, buffer_length)
+                self.assertEqual(series.shape, shape)
+                self.assertEqual(series.item.shape, shape if shape else (1,))
+                self.assertEqual(series.ndim, ndim)
+                self.assertEqual(series.dtype, array.dtype)
+                self.assertEqual(series.maxtime, None)
+                self.assertEqual(series.time_index, nstored)
+
 
 if __name__ == '__main__':
     unittest.main()

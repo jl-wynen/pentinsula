@@ -50,9 +50,10 @@ class TimeSeries:
             series = cls(file, dataset, dataset.chunks[0], shape=dataset.shape[1:],
                          dtype=dataset.dtype, maxshape=dataset.maxshape)
             if dataset.shape[0] % dataset.chunks[0] == 0:
-                # first element of chunk
+                # First element of chunk, nothing to read.
                 series.select(dataset.shape[0], BufferPolicy.NOTHING)
             else:
+                # Item at shape[0] does not exist, read the one before that and advance.
                 series.read(dataset.shape[0] - 1, file=dataset.file, dataset=dataset)
                 series.advance(BufferPolicy.NOTHING)
             return series

@@ -243,7 +243,8 @@ class MyTestCase(unittest.TestCase):
 
             # stop index out of bounds
             with self.assertRaises(ValueError):
-                series.read_iter(slice(0, buffer_length * nchunks))
+                for _ in series.read_iter(slice(0, buffer_length * nchunks * 2)):
+                    break
 
     def test_write_iter(self):
         for ndim in range(0, 4):

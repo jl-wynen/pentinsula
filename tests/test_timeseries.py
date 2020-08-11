@@ -207,6 +207,7 @@ class MyTestCase(unittest.TestCase):
                 np.testing.assert_allclose(read[:separatrix], repeated_chunk_data[:separatrix])
                 np.testing.assert_allclose(read[separatrix:], base_data[separatrix:])
 
+    @repeat(N_REPEAT_TEST_CASE)
     def test_read_iter(self):
         for ndim in range(0, 4):
             shape = random_int_tuple(1, 10, ndim)
@@ -246,6 +247,7 @@ class MyTestCase(unittest.TestCase):
                 for _ in series.read_iter(slice(0, buffer_length * nchunks * 2)):
                     break
 
+    @repeat(N_REPEAT_TEST_CASE)
     def test_write_iter(self):
         for ndim in range(0, 4):
             shape = random_int_tuple(1, 10, ndim)

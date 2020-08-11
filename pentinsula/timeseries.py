@@ -158,9 +158,11 @@ class TimeSeries:
             raise ValueError(f"Number of times {times.stop} out of bounds, "
                              f"the dataset only contains {ntimes} time points.")
 
-        _, stop, step = times.indices(ntimes)
+        start, stop, step = times.indices(ntimes)
+        if start is None:
+            start = self.time_index
 
-        for time_index in range(self.time_index, stop, step):
+        for time_index in range(start, stop, step):
             self.select(time_index, BufferPolicy.READ, file=file, dataset=dataset)
             yield time_index, self.item
 

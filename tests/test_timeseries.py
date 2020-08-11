@@ -119,6 +119,25 @@ class MyTestCase(unittest.TestCase):
                 self.assertEqual(series.maxtime, None)
                 self.assertEqual(series.time_index, nstored)
 
+    @repeat(N_REPEAT_TEST_CASE)
+    def test_dataset_creation(self):
+        for ndim in range(0, 4):
+            shape = random_int_tuple(1, 10, ndim)
+            buffer_length = random.randint(1, 10)
+            nchunks = random.randint(1, 4)
+            dtype = random.choice((int, float))
+
+            for time_index in range(0, buffer_length * nchunks):
+                stream = BytesIO()
+                series = TimeSeries(stream, "data", buffer_length, shape, dtype=dtype)
+                series.select(time_index)
+                series.create_dataset(write=False)
+
+                loaded = TimeSeries.load(stream, "data", time_index)
+                self.assertEqual(loaded.shape, shape)
+                self.assertEqual(loaded.dtype, dtype)
+                self.assertEqual(loaded.time_index, time_index)
+
 
 if __name__ == '__main__':
     unittest.main()

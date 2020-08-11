@@ -105,7 +105,12 @@ class ChunkBuffer:
             # Only check if self._filename is a Path in order to allow for storing streams.
             if isinstance(self._filename, Path) and dataset.file.filename != str(self._filename):
                 raise ValueError(f"Dataset is not in the stored file ({self._filename}).")
-            yield dataset
+
+            if isinstance(dataset, h5.Dataset):
+                yield dataset
+            else:
+                with open_or_pass_file(file, self._filename, filemode) as h5f:
+                    yield h5f[str(dataset)]
 
     @contextmanager
     def _retrieve_dataset(self, file, dataset, filemode):
@@ -113,7 +118,6 @@ class ChunkBuffer:
             def raise_error(name, in_file, in_memory):
                 raise RuntimeError(f"The {name} of dataset {dataset.name} in file {dataset.file.filename} ({in_file}) "
                                    f"does not match the {name} of ChunkBuffer ({in_memory}).")
-
             if dataset.chunks != self._buffer.shape:
                 raise_error("chunk shape", dataset.chunks, self._buffer.shape)
             if dataset.dtype != self._buffer.dtype:

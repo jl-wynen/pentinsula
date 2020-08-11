@@ -34,6 +34,7 @@ class TimeSeries:
         self._buffer_time_index = 0  # into the buffer, not total time
 
     # load stored stuff
+    # index >= 0
     @classmethod
     def load(cls, file, dataset, time_index):
         with open_or_pass_dataset(file, dataset, None, "r") as dataset:

@@ -207,6 +207,48 @@ class MyTestCase(unittest.TestCase):
                 np.testing.assert_allclose(read[:separatrix], repeated_chunk_data[:separatrix])
                 np.testing.assert_allclose(read[separatrix:], base_data[separatrix:])
 
+    def test_read_iter(self):
+        for ndim in range(0, 4):
+            shape = random_int_tuple(1, 10, ndim)
+            buffer_length = random.randint(1, 10)
+            nchunks = random.randint(1, 4)
+            fill_level = random.randint(1, buffer_length)
+            array = np.random.uniform(-10, 10, ((nchunks - 1) * buffer_length + fill_level,) + shape)
+
+            stream = BytesIO()
+            with h5.File(stream, "w") as h5f:
+                if array.shape[0] < buffer_length:
+                    h5f.create_dataset("data", shape=(buffer_length,) + shape, chunks=(buffer_length,) + shape)
+                    h5f["data"][:buffer_length] = array
+                else:
+                    h5f.create_dataset("data", data=array, chunks=(buffer_length,) + shape)
+
+            series = TimeSeries.load(stream, "data", 0)
+            # all times
+            file_arg = None if random.random() < 0.5 else stream
+            dataset_arg = None if random.random() < 0.5 else "data"
+            for desired_index, (time_index, item) in enumerate(series.read_iter(file=file_arg,
+                                                                                dataset=dataset_arg)):
+                self.assertEqual(time_index, desired_index)
+                np.testing.assert_allclose(item, array[time_index])
+            with h5.File(stream, "r") as h5f:
+                np.testing.assert_allclose(h5f["data"][()], array)
+
+            # random slice
+            times = slice(random.randint(0, buffer_length * nchunks),
+                          random.randint(1, buffer_length * nchunks),
+                          random.randint(1, buffer_length * nchunks // 2))
+            for desired_index, (time_index, item) in zip(range(times.start, times.stop, times.step),
+                                                         series.read_iter(times,
+                                                                          file=file_arg,
+                                                                          dataset=dataset_arg)):
+                self.assertEqual(time_index, desired_index)
+                np.testing.assert_allclose(item, array[time_index])
+
+            # stop index out of bounds
+            with self.assertRaises(ValueError):
+                series.read_iter(slice(0, buffer_length * nchunks))
+
 
 if __name__ == '__main__':
     unittest.main()

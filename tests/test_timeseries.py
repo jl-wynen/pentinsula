@@ -249,6 +249,30 @@ class MyTestCase(unittest.TestCase):
             with self.assertRaises(ValueError):
                 series.read_iter(slice(0, buffer_length * nchunks))
 
+    def test_write_iter(self):
+        for ndim in range(0, 4):
+            shape = random_int_tuple(1, 10, ndim)
+            buffer_length = random.randint(1, 10)
+            nchunks = random.randint(1, 4)
+            fill_level = random.randint(1, buffer_length)
+            array = np.random.uniform(-10, 10, ((nchunks - 1) * buffer_length + fill_level,) + shape)
+
+            stream = BytesIO()
+            series = TimeSeries(stream, "data", buffer_length, shape)
+            series.create_dataset(write=False)
+
+            file_arg = None if random.random() < 0.5 else stream
+            dataset_arg = None if random.random() < 0.5 else "data"
+            for desired_index, (time_index, item) in zip(range(array.shape[0]),
+                                                         series.write_iter(flush=True,
+                                                                           file=file_arg,
+                                                                           dataset=dataset_arg)):
+                self.assertEqual(time_index, desired_index)
+                item[...] = array[time_index]
+
+            with h5.File(stream, "r") as h5f:
+                np.testing.assert_allclose(h5f["data"][()], array)
+
 
 if __name__ == '__main__':
     unittest.main()

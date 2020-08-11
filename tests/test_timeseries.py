@@ -234,7 +234,7 @@ class MyTestCase(unittest.TestCase):
             # random slice
             times = slice(random.randint(0, buffer_length * nchunks),
                           random.randint(1, array.shape[0]),
-                          random.randint(1, buffer_length * nchunks // 2))
+                          random.randint(1, max(1, buffer_length * nchunks // 2)))
             for desired_index, (time_index, item) in zip(range(times.start, times.stop, times.step),
                                                          series.read_iter(times,
                                                                           file=file_arg,

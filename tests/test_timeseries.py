@@ -212,16 +212,12 @@ class MyTestCase(unittest.TestCase):
             shape = random_int_tuple(1, 10, ndim)
             buffer_length = random.randint(1, 10)
             nchunks = random.randint(1, 4)
-            fill_level = random.randint(1, buffer_length)
+            fill_level = random.randint(1, buffer_length) if nchunks > 1 else buffer_length
             array = np.random.uniform(-10, 10, ((nchunks - 1) * buffer_length + fill_level,) + shape)
 
             stream = BytesIO()
             with h5.File(stream, "w") as h5f:
-                if array.shape[0] < buffer_length:
-                    h5f.create_dataset("data", shape=(buffer_length,) + shape, chunks=(buffer_length,) + shape)
-                    h5f["data"][:buffer_length] = array
-                else:
-                    h5f.create_dataset("data", data=array, chunks=(buffer_length,) + shape)
+                h5f.create_dataset("data", data=array, chunks=(buffer_length,) + shape)
 
             series = TimeSeries.load(stream, "data", 0)
             # all times

@@ -10,12 +10,54 @@ from .types import File, Dataset, Shape, DType
 
 
 class ChunkBuffer:
+    """
+    Hold a buffer to a single chunk of an HDF5 dataset.
+
+    This class stores a chunk of an HDF5 dataset in memory as a numpy array and provides methods
+    for synchronizing the buffer with the file.
+    It is important to note that ChunkBuffer never reads from or writes to the file on its own.
+    The user must call the corresponding methods to ensure that the buffer and file are up to date.
+
+    ChunkBuffer maintains an index to a chunk in the dataset.
+    A chunk index is a tuple of ndim numbers, where ndim is the number of dimensions (ranks)
+    of the dataset.
+    This index can be changed with the 'select' method.
+    The 'read' and 'write' methods use the currently selected index if not given a different index
+    as an argument (only 'read').
+
+    It is possible to handle chunks that are not fully filled (size of dataset is not a multiple
+    of the chunk size).
+    However, ChunkBuffer always holds a full chunk in memory and does not maintain any information
+    on how much the chunk is filled as the user has direct write access to the underlying array.
+    The read and write methods can return / take as argument the fill level of the chunk and the
+    user has to use those appropriately.
+    The 'fill level' is a tuple or list of integers that indicates for each dimension how many
+    elements are in use.
+    For example, for a fully filled chunk, fill_level = chunk_shape.
+    For a half filled chunk, fill_level = [size // 2 for size in chunk_shape].
+    """
+
     def __init__(self, file: File,
                  dataset: Dataset,
                  shape: Shape = None,
                  dtype: DType = None,
                  data: Optional[np.ndarray] = None,
                  maxshape: Shape = None):
+        """
+        Construct a ChunkBuffer in memory.
+        Does not verify if a suitable dataset exists in the file or create one.
+        The first chunk of the dataset is selected.
+
+        :param file: The file that the dataset lives in.
+        :param dataset: The dataset to buffer.
+        :param shape: Shape of the *chunk*, not the whole dataset. Required if data is None.
+        :param dtype: Datatype of the dataset.
+        :param data: Initial data for the *chunk*, not the whole dataset.
+                     The chunk shape is inferred from this if argument shape is None, otherwise,
+                     attempts to reshape the array.
+        :param maxshape: Maximum shape of the dataset.
+        """
+
         # special casing on str instead of converting any file to Path allows for streams
         self._filename = (Path(file.filename) if isinstance(file, h5.File)
                           else (Path(file) if isinstance(file, str) else file))
@@ -40,6 +82,16 @@ class ChunkBuffer:
              dataset: Dataset,
              chunk_index: Shape,
              o_fill_level: Optional[List[int]] = None):
+        """
+        Load a chunk of an existing dataset.
+
+        :param file: The file containing the dataset.
+        :param dataset: The dataset to load. Must be chunked.
+        :param chunk_index: The chunk to load.
+        :param o_fill_level: If given a list, it is filled with the fill level of the loaded chunk.
+        :return: A newly constructed ChunkBuffer.
+        """
+
         with open_or_pass_dataset(file, dataset, None, "r") as dataset:
             chunk_buffer = cls(file, dataset, dataset.chunks, dtype=dataset.dtype, maxshape=dataset.maxshape)
             chunk_buffer.select(_normalise_chunk_index(chunk_index,
@@ -53,42 +105,73 @@ class ChunkBuffer:
 
     @property
     def data(self) -> np.ndarray:
-        # return view to prevent metadata changes in _buffer
+        """
+        A view of the stored buffer.
+        You can read and modify the data contained in the buffer through this view.
+
+        Note that this only accesses the buffer in memory, you need to call
+        read / write to synchronise with the file.
+        """
         return self._buffer.view()
 
     @property
     def shape(self) -> Shape:
+        """
+        The shape of the buffer, that is the shape of a single chunk.
+        """
         return self._buffer.shape
 
     @property
     def ndim(self) -> int:
+        """
+        The number of dimensions (ranks) of the dataset.
+        """
         return self._buffer.ndim
 
     @property
     def dtype(self) -> np.dtype:
+        """
+        The datatype of the dataset.
+        """
         return self._buffer.dtype
 
     @property
     def maxshape(self) -> Shape:
+        """
+        The maximum shape of the dataset.
+        """
         return self._maxshape
 
     @property
     def chunk_index(self) -> Shape:
+        """
+        The current chunk index (immutable).
+        """
         return self._chunk_index
 
     @property
     def filename(self) -> Path:
+        """
+        The name of the HDF5 file.
+        """
         return self._filename
 
     @property
     def dataset_name(self) -> Path:
+        """
+        The full path of the dataset inside of the HDF5 file.
+        """
         return self._dataset_name
 
     def select(self, chunk_index: Shape):
         """
-        Does not read!
-        :param chunk_index: must be positive
-        :return:
+        Select a chunk.
+
+        This function verifies that the index is valid based on metadata that is available in memory.
+        No synchronisation with the file happens, in particular the chunk is not read from the file
+        and the buffer keeps its prior contents.
+
+        :param chunk_index: A tuple of indices of the chunk to select. All indices must be positive.
         """
 
         # validate index
@@ -105,6 +188,10 @@ class ChunkBuffer:
 
     @contextmanager
     def _load_or_pass_dataset(self, file: Optional[File], dataset: Optional[Dataset], filemode: str):
+        """
+        Contextmanager to load a dataset from file or pass along the argument.
+        """
+
         if dataset is None:
             with open_or_pass_file(file, self._filename, filemode) as h5f:
                 yield h5f[str(self._dataset_name)]
@@ -124,6 +211,11 @@ class ChunkBuffer:
 
     @contextmanager
     def _retrieve_dataset(self, file: Optional[File], dataset: Optional[Dataset], filemode: str):
+        """
+        Contextmanager to get a handle to the dataset.
+        Checks metadata of self against the file.
+        """
+
         with self._load_or_pass_dataset(file, dataset, filemode) as dataset:
             def raise_error(name, in_file, in_memory):
                 raise RuntimeError(f"The {name} of dataset {dataset.name} in file {dataset.file.filename} ({in_file}) "
@@ -141,6 +233,22 @@ class ChunkBuffer:
     def read(self, chunk_index: Optional[Shape] = None,
              file: Optional[File] = None,
              dataset: Optional[Dataset] = None) -> Union[List[int], Tuple[int, ...]]:
+        """
+        Read a chunk from the file.
+
+        The chunk must exist in the dataset in the HDF5 file.
+        All stored metadata is checked against the file and an error is raised if there is a mismatch.
+
+        An existing file or dataset handle to a currently open connection can be passed in as arguments
+        to avoid opening the file on ever call to this function.
+
+        :param chunk_index: Index of the chunk to read.
+                            If None, use currently selected chunk, i.e. self.chunk_index.
+        :param file: Indicates the file to read from. If given, it must match the filename stored in the buffer.
+        :param dataset: Indicates the dataset to read from.
+        :return: The fill level of the chunk.
+        """
+
         with self._retrieve_dataset(file, dataset, "r") as dataset:
             if chunk_index is not None:
                 self.select(chunk_index)
@@ -159,6 +267,22 @@ class ChunkBuffer:
               fill_level: Optional[Union[List[int], Tuple[int, ...]]] = None,
               file: Optional[File] = None,
               dataset: Optional[Dataset] = None):
+        """
+        Write the currently selected chunk to the file.
+
+        All stored metadata is checked against the file and an error is raised if there is a mismatch.
+
+        An existing file or dataset handle to a currently open connection can be passed in as arguments
+        to avoid opening the file on ever call to this function.
+
+        :param must_exist: If True, raise an error if the chunk is not already allocated in the dataset.
+                           If False, resize the dataset to include the chunk but only up to the fill level.
+        :param fill_level: For each dimension, indicate the fill level of the chunk.
+                           Only the parts of the buffer within the fill level are written.
+        :param file: Indicates the file to write to. If given, it must match the filename stored in the buffer.
+        :param dataset: Indicates the dataset to write to.
+        """
+
         fill_level = self._buffer.shape if fill_level is None else fill_level
         required_shape = _required_dataset_shape(self._chunk_index,
                                                  self._buffer.shape,
@@ -184,6 +308,18 @@ class ChunkBuffer:
                        filemode: str = "a",
                        write: bool = True,
                        fill_level: Optional[Union[List[int], Tuple[int, ...]]] = None):
+        """
+        Create a new dataset in the file big enough to contain the currently selected chunk.
+
+        :param file: If given, use this file handle to access the HDF5 file, otherwise use the stored filename.
+        :param filemode: Open-mode of the file, see documentation of h5py.File.
+        :param write: If True, write the buffer to the dataset.
+                      Only the selected chunk is written, the content of the other chunks is undefined.
+                      If False, no data is written, the contents of the dataset are undefined.
+        :param fill_level: For each dimension, indicate the fill level of the chunk.
+                           Used for computing the shape of the dataset and which parts of the buffer to write.
+        """
+
         fill_level = self._buffer.shape if fill_level is None else fill_level
 
         with open_or_pass_file(file, self._filename, filemode) as h5f:
@@ -199,6 +335,11 @@ class ChunkBuffer:
 
 
 def _normalise_chunk_index(chunk_index: Shape, nchunks: Shape) -> Shape:
+    """
+    Make sure the chunk index is within bounds and return a new tuple where all negative indices are
+    replaced by corresponding positive onces.
+    """
+
     if len(chunk_index) != len(nchunks):
         raise IndexError(f"Invalid index dimension {len(chunk_index)} for dataset dimension {len(nchunks)}")
 
@@ -216,10 +357,23 @@ def _tuple_ceildiv(numerator: Shape, denominator: Shape) -> Shape:
 
 
 def _chunk_number(full_shape: Shape, chunk_shape: Shape) -> Shape:
+    """
+    :param full_shape: Shape of the entire dataset.
+    :param chunk_shape: Shape of a single chunk
+    :return: Number of chunks in every dimension.
+    """
     return _tuple_ceildiv(full_shape, chunk_shape)
 
 
 def _chunk_fill_level(full_shape: Shape, chunk_shape: Shape, chunk_index: Shape, nchunks: Shape) -> Shape:
+    """
+    :param full_shape: Shape of the entire dataset.
+    :param chunk_shape: Shape of a single chunk.
+    :param chunk_index: Index of a chunk.
+    :param nchunks: Number of chunks.
+    :return: Fill level of the given chunk.
+    """
+
     # The Modulo operation evaluates to
     # for i in range(2*n):   n - (-i % n)
     #   -> n, 1, 2, ..., n-2, n-1, n, 1, 2, ..., n-2, n-1
@@ -229,11 +383,19 @@ def _chunk_fill_level(full_shape: Shape, chunk_shape: Shape, chunk_index: Shape,
 
 
 def _chunk_slices(chunk_index: Shape, chunk_shape: Shape) -> Tuple[slice, ...]:
+    """
+    :param chunk_index: Index of a chunk.
+    :param chunk_shape: Shape of chunks.
+    :return: Slices into the dataset to address the given chunk.
+    """
     return tuple(slice(i * n, (i + 1) * n)
                  for i, n in zip(chunk_index, chunk_shape))
 
 
 def _required_dataset_shape(chunk_index: Shape, chunk_shape: Shape, fill_level: Union[Shape, List[int]]) -> Shape:
+    """
+    Return the minimum dataset shape to include the given chunk with the given fill level.
+    """
     for dim, (length, fl) in enumerate(zip(chunk_shape, fill_level)):
         if fl > length:
             raise ValueError(f"Fill level {fill_level} is greater than chunk shape {chunk_shape} in dimension {dim}.")

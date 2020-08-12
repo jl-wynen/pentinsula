@@ -1,14 +1,21 @@
 from contextlib import contextmanager
 from pathlib import Path
+from typing import List, Optional, Tuple, Union
 
 import h5py as h5
 import numpy as np
 
 from .h5utils import get_dataset_name, open_or_pass_file, open_or_pass_dataset
+from .types import File, Dataset, Shape, DType
 
 
 class ChunkBuffer:
-    def __init__(self, file, dataset, shape=None, dtype=None, data=None, maxshape=None):
+    def __init__(self, file: File,
+                 dataset: Dataset,
+                 shape: Shape = None,
+                 dtype: DType = None,
+                 data: Optional[np.ndarray] = None,
+                 maxshape: Shape = None):
         # special casing on str instead of converting any file to Path allows for streams
         self._filename = (Path(file.filename) if isinstance(file, h5.File)
                           else (Path(file) if isinstance(file, str) else file))
@@ -29,7 +36,10 @@ class ChunkBuffer:
         self._chunk_index = (0,) * self._buffer.ndim
 
     @classmethod
-    def load(cls, file, dataset, chunk_index, o_fill_level=None):
+    def load(cls, file: File,
+             dataset: Dataset,
+             chunk_index: Shape,
+             o_fill_level: Optional[List[int]] = None):
         with open_or_pass_dataset(file, dataset, None, "r") as dataset:
             chunk_buffer = cls(file, dataset, dataset.chunks, dtype=dataset.dtype, maxshape=dataset.maxshape)
             chunk_buffer.select(_normalise_chunk_index(chunk_index,
@@ -42,39 +52,39 @@ class ChunkBuffer:
             return chunk_buffer
 
     @property
-    def data(self):
+    def data(self) -> np.ndarray:
         # return view to prevent metadata changes in _buffer
         return self._buffer.view()
 
     @property
-    def shape(self):
+    def shape(self) -> Shape:
         return self._buffer.shape
 
     @property
-    def ndim(self):
+    def ndim(self) -> int:
         return self._buffer.ndim
 
     @property
-    def dtype(self):
+    def dtype(self) -> np.dtype:
         return self._buffer.dtype
 
     @property
-    def maxshape(self):
+    def maxshape(self) -> Shape:
         return self._maxshape
 
     @property
-    def chunk_index(self):
+    def chunk_index(self) -> Shape:
         return self._chunk_index
 
     @property
-    def filename(self):
+    def filename(self) -> Path:
         return self._filename
 
     @property
-    def dataset_name(self):
+    def dataset_name(self) -> Path:
         return self._dataset_name
 
-    def select(self, chunk_index):
+    def select(self, chunk_index: Shape):
         """
         Does not read!
         :param chunk_index: must be positive
@@ -94,7 +104,7 @@ class ChunkBuffer:
         self._chunk_index = chunk_index
 
     @contextmanager
-    def _load_or_pass_dataset(self, file, dataset, filemode):
+    def _load_or_pass_dataset(self, file: Optional[File], dataset: Optional[Dataset], filemode: str):
         if dataset is None:
             with open_or_pass_file(file, self._filename, filemode) as h5f:
                 yield h5f[str(self._dataset_name)]
@@ -113,11 +123,12 @@ class ChunkBuffer:
                     yield h5f[str(dataset)]
 
     @contextmanager
-    def _retrieve_dataset(self, file, dataset, filemode):
+    def _retrieve_dataset(self, file: Optional[File], dataset: Optional[Dataset], filemode: str):
         with self._load_or_pass_dataset(file, dataset, filemode) as dataset:
             def raise_error(name, in_file, in_memory):
                 raise RuntimeError(f"The {name} of dataset {dataset.name} in file {dataset.file.filename} ({in_file}) "
                                    f"does not match the {name} of ChunkBuffer ({in_memory}).")
+
             if dataset.chunks != self._buffer.shape:
                 raise_error("chunk shape", dataset.chunks, self._buffer.shape)
             if dataset.dtype != self._buffer.dtype:
@@ -127,7 +138,9 @@ class ChunkBuffer:
 
             yield dataset
 
-    def read(self, chunk_index=None, file=None, dataset=None):
+    def read(self, chunk_index: Optional[Shape] = None,
+             file: Optional[File] = None,
+             dataset: Optional[Dataset] = None) -> Union[List[int], Tuple[int, ...]]:
         with self._retrieve_dataset(file, dataset, "r") as dataset:
             if chunk_index is not None:
                 self.select(chunk_index)
@@ -142,7 +155,10 @@ class ChunkBuffer:
                                 dest_sel=tuple(slice(0, n) for n in fill_level))
             return fill_level
 
-    def write(self, must_exist, fill_level=None, file=None, dataset=None):
+    def write(self, must_exist: bool,
+              fill_level: Optional[Union[List[int], Tuple[int, ...]]] = None,
+              file: Optional[File] = None,
+              dataset: Optional[Dataset] = None):
         fill_level = self._buffer.shape if fill_level is None else fill_level
         required_shape = _required_dataset_shape(self._chunk_index,
                                                  self._buffer.shape,
@@ -164,7 +180,10 @@ class ChunkBuffer:
                                  source_sel=tuple(slice(0, n) for n in fill_level),
                                  dest_sel=_chunk_slices(self._chunk_index, self._buffer.shape))
 
-    def create_dataset(self, file=None, filemode="a", write=True, fill_level=None):
+    def create_dataset(self, file: Optional[File] = None,
+                       filemode: str = "a",
+                       write: bool = True,
+                       fill_level: Optional[Union[List[int], Tuple[int, ...]]] = None):
         fill_level = self._buffer.shape if fill_level is None else fill_level
 
         with open_or_pass_file(file, self._filename, filemode) as h5f:
@@ -179,7 +198,7 @@ class ChunkBuffer:
                 self.write(True, dataset=dataset, fill_level=fill_level)
 
 
-def _normalise_chunk_index(chunk_index, nchunks):
+def _normalise_chunk_index(chunk_index: Shape, nchunks: Shape) -> Shape:
     if len(chunk_index) != len(nchunks):
         raise IndexError(f"Invalid index dimension {len(chunk_index)} for dataset dimension {len(nchunks)}")
 
@@ -191,16 +210,16 @@ def _normalise_chunk_index(chunk_index, nchunks):
     return tuple(normalised)
 
 
-def _tuple_ceildiv(numerator, denominator):
+def _tuple_ceildiv(numerator: Shape, denominator: Shape) -> Shape:
     # -(-n // d) computes ceil(n / d) but to infinite precision.
     return tuple(-(-num // den) for num, den in zip(numerator, denominator))
 
 
-def _chunk_number(full_shape, chunk_shape):
+def _chunk_number(full_shape: Shape, chunk_shape: Shape) -> Shape:
     return _tuple_ceildiv(full_shape, chunk_shape)
 
 
-def _chunk_fill_level(full_shape, chunk_shape, chunk_index, nchunks):
+def _chunk_fill_level(full_shape: Shape, chunk_shape: Shape, chunk_index: Shape, nchunks: Shape) -> Shape:
     # The Modulo operation evaluates to
     # for i in range(2*n):   n - (-i % n)
     #   -> n, 1, 2, ..., n-2, n-1, n, 1, 2, ..., n-2, n-1
@@ -209,12 +228,12 @@ def _chunk_fill_level(full_shape, chunk_shape, chunk_index, nchunks):
                  for full, chunk, idx, nchunk in zip(full_shape, chunk_shape, chunk_index, nchunks))
 
 
-def _chunk_slices(chunk_index, chunk_shape):
+def _chunk_slices(chunk_index: Shape, chunk_shape: Shape) -> Tuple[slice, ...]:
     return tuple(slice(i * n, (i + 1) * n)
                  for i, n in zip(chunk_index, chunk_shape))
 
 
-def _required_dataset_shape(chunk_index, chunk_shape, fill_level):
+def _required_dataset_shape(chunk_index: Shape, chunk_shape: Shape, fill_level: Union[Shape, List[int]]) -> Shape:
     for dim, (length, fl) in enumerate(zip(chunk_shape, fill_level)):
         if fl > length:
             raise ValueError(f"Fill level {fill_level} is greater than chunk shape {chunk_shape} in dimension {dim}.")

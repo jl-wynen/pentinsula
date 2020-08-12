@@ -1,7 +1,12 @@
 from enum import Flag, auto
+from pathlib import Path
+from typing import List, Optional, Tuple, Union
+
+import numpy as np
 
 from .chunkbuffer import ChunkBuffer
 from .h5utils import open_or_pass_dataset
+from .types import File, Dataset, Shape, DType
 
 
 class BufferPolicy(Flag):
@@ -12,8 +17,13 @@ class BufferPolicy(Flag):
 
 
 class TimeSeries:
-    def __init__(self, file_or_buffer, dataset=None, buffer_length=None,
-                 shape=(), dtype=None, maxshape=None):
+    def __init__(self,
+                 file_or_buffer: Union[File, ChunkBuffer],
+                 dataset: Optional[Dataset] = None,
+                 buffer_length: Optional[int] = None,
+                 shape: Shape = (),
+                 dtype: Optional[DType] = None,
+                 maxshape: Optional[Shape] = None):
         """
 
         :param file:
@@ -36,7 +46,7 @@ class TimeSeries:
     # load stored stuff
     # index >= 0
     @classmethod
-    def load(cls, file, dataset, time_index):
+    def load(cls, file: File, dataset: Dataset, time_index: int):
         with open_or_pass_dataset(file, dataset, None, "r") as dataset:
             series = cls(file, dataset, dataset.chunks[0], shape=dataset.shape[1:],
                          dtype=dataset.dtype, maxshape=dataset.maxshape)
@@ -45,7 +55,7 @@ class TimeSeries:
 
     # extend a series
     @classmethod
-    def pick_up(cls, file, dataset):
+    def pick_up(cls, file: File, dataset: Dataset):
         with open_or_pass_dataset(file, dataset, None, "r") as dataset:
             series = cls(file, dataset, dataset.chunks[0], shape=dataset.shape[1:],
                          dtype=dataset.dtype, maxshape=dataset.maxshape)
@@ -59,46 +69,49 @@ class TimeSeries:
             return series
 
     @property
-    def filename(self):
+    def filename(self) -> Path:
         return self._buffer.filename
 
     @property
-    def dataset_name(self):
+    def dataset_name(self) -> Path:
         return self._buffer.dataset_name
 
     @property
-    def buffer_length(self):
+    def buffer_length(self) -> int:
         return self._buffer.shape[0]
 
     @property
-    def shape(self):
+    def shape(self) -> Shape:
         return self._buffer.shape[1:]
 
     @property
-    def ndim(self):
+    def ndim(self) -> int:
         return self._buffer.ndim - 1
 
     @property
-    def dtype(self):
+    def dtype(self) -> DType:
         return self._buffer.dtype
 
     @property
-    def maxtime(self):
+    def maxtime(self) -> int:
         return self._buffer.maxshape[0]
 
     @property
-    def time_index(self):
+    def time_index(self) -> int:
         return self._buffer.chunk_index[0] * self._buffer.shape[0] \
                + self._buffer_time_index
 
     @property
-    def item(self):
+    def item(self) -> np.ndarray:
         if len(self.shape) == 0:
             # Return an array for scalar items to allow assignment.
             return self._buffer.data.reshape(-1, 1)[self._buffer_time_index]
         return self._buffer.data[self._buffer_time_index]
 
-    def select(self, time_index, on_buffer_change=BufferPolicy.NOTHING, file=None, dataset=None):
+    def select(self, time_index: int,
+               on_buffer_change: BufferPolicy = BufferPolicy.NOTHING,
+               file: Optional[File] = None,
+               dataset: Optional[Dataset] = None):
         """
         this does not read:
         ts.select(3)
@@ -128,10 +141,12 @@ class TimeSeries:
 
         self._buffer_time_index = time_index % self._buffer.shape[0]
 
-    def advance(self, on_buffer_change=BufferPolicy.NOTHING, file=None, dataset=None):
+    def advance(self, on_buffer_change: BufferPolicy = BufferPolicy.NOTHING,
+                file: Optional[File] = None,
+                dataset: Optional[Dataset] = None):
         self.select(self.time_index + 1, on_buffer_change, file=file, dataset=dataset)
 
-    def read(self, time_index=None, file=None, dataset=None):
+    def read(self, time_index: Optional[int] = None, file: Optional[File] = None, dataset: Optional[Dataset] = None):
         if time_index is not None:
             self.select(time_index, BufferPolicy.NOTHING)
         fill_level = self._buffer.read(file=file, dataset=dataset)
@@ -139,17 +154,17 @@ class TimeSeries:
             raise RuntimeError(f"Cannot read data for time index {self.time_index}. The dataset only contains items "
                                f"up to time {self._buffer.chunk_index[0] * self._buffer.shape[0] + fill_level[0] - 1}.")
 
-    def write(self, file=None, dataset=None):
+    def write(self, file: Optional[File] = None, dataset: Optional[File] = None):
         self._buffer.write(must_exist=False,
                            fill_level=(self._buffer_time_index + 1,) + self.shape,
                            file=file,
                            dataset=dataset)
 
-    def create_dataset(self, file=None, filemode="a", write=True):
+    def create_dataset(self, file: Optional[File] = None, filemode: str = "a", write: bool = True):
         self._buffer.create_dataset(file, filemode, write,
                                     fill_level=(self._buffer_time_index + 1,) + self.shape)
 
-    def read_iter(self, times=slice(None), file=None, dataset=None):
+    def read_iter(self, times: slice = slice(None), file: Optional[File] = None, dataset: Optional[Dataset] = None):
         file = self._buffer.filename if file is None else file
         dataset = self._buffer.dataset_name if dataset is None else dataset
         with open_or_pass_dataset(file, dataset, None, "r") as dataset:
@@ -166,7 +181,7 @@ class TimeSeries:
             self.select(time_index, BufferPolicy.READ, file=file, dataset=dataset)
             yield time_index, self.item
 
-    def write_iter(self, flush=True, file=None, dataset=None):
+    def write_iter(self, flush: bool = True, file: Optional[File] = None, dataset: Optional[Dataset] = None):
         # Like builtin range but allows for infinite loops with stop=None.
         def range_(start, stop):
             if stop is None:

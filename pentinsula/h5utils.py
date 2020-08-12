@@ -1,12 +1,17 @@
 from contextlib import contextmanager
 from io import BytesIO
 from pathlib import Path
+from typing import Optional, Union
 
 import h5py as h5
 
+from .types import File, Dataset
+
 
 @contextmanager
-def open_or_pass_file(file, stored_filename, *args, **kwargs):
+def open_or_pass_file(file: Optional[File],
+                      stored_filename: Optional[Union[str, Path, BytesIO]],
+                      *args, **kwargs) -> h5.File:
     if stored_filename is not None:
         if file is not None and not isinstance(file, BytesIO):
             filename = Path(file.filename) if isinstance(file, h5.File) else Path(file)
@@ -22,7 +27,10 @@ def open_or_pass_file(file, stored_filename, *args, **kwargs):
 
 
 @contextmanager
-def open_or_pass_dataset(file, dataset, stored_filename=None, *args, **kwargs):
+def open_or_pass_dataset(file: Optional[File],
+                         dataset: Dataset,
+                         stored_filename: Optional[Union[str, Path, BytesIO]] = None,
+                         *args, **kwargs) -> h5.Dataset:
     with open_or_pass_file(file, stored_filename, *args, **kwargs) as h5f:
         dataset = dataset if isinstance(dataset, h5.Dataset) else h5f[str(dataset)]
         if dataset.chunks is None:
@@ -30,8 +38,8 @@ def open_or_pass_dataset(file, dataset, stored_filename=None, *args, **kwargs):
         yield dataset
 
 
-def get_dataset_name(dataset):
+def get_dataset_name(dataset: Dataset) -> Path:
     name = Path(dataset.name if isinstance(dataset, h5.Dataset) else dataset)
     if not name.is_absolute():
-        name = "/"/name
+        name = "/" / name
     return name

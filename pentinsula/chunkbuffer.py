@@ -240,7 +240,7 @@ class ChunkBuffer:
         All stored metadata is checked against the file and an error is raised if there is a mismatch.
 
         An existing file or dataset handle to a currently open connection can be passed in as arguments
-        to avoid opening the file on ever call to this function.
+        to avoid opening the file on every call to this function.
 
         :param chunk_index: Index of the chunk to read.
                             If None, use currently selected chunk, i.e. self.chunk_index.
@@ -273,7 +273,7 @@ class ChunkBuffer:
         All stored metadata is checked against the file and an error is raised if there is a mismatch.
 
         An existing file or dataset handle to a currently open connection can be passed in as arguments
-        to avoid opening the file on ever call to this function.
+        to avoid opening the file on every call to this function.
 
         :param must_exist: If True, raise an error if the chunk is not already allocated in the dataset.
                            If False, resize the dataset to include the chunk but only up to the fill level.

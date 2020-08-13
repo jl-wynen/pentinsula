@@ -90,3 +90,7 @@ In contrast to `write_iter`, `read_iter` terminates on its own if it reaches the
 The read example shows how you can keep the file open by passing a file and dataset handle (the latter can be omitted) to the iterator.
 In the `write_iter` example, the file is opened automatically whenever data needs to be written.
 Both iterators support those two modes. 
+
+# License
+
+Distributed under the MIT license. See `LICENSE` for more information.

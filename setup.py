@@ -40,10 +40,17 @@ def get_version():
     """
 
     tag_hash, version = git_version_tag()
+    try:
+        tag_commit_hash = subprocess.check_output(["git", "rev-parse", "--short", f"v{version}^{{}}"]) \
+            .decode("utf-8") \
+            .strip()
+    except subprocess.CalledProcessError:
+        tag_commit_hash = 0
     current_hash = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]) \
         .decode("utf-8") \
         .strip()
-    if tag_hash != current_hash:
+
+    if tag_commit_hash != current_hash:
         version = version + ".dev" + current_hash
 
     return version
